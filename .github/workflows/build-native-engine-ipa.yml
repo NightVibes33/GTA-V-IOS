@@ -59,7 +59,9 @@ jobs:
           ! grep -Fq 'crate::touch::install(&window)' native/Muguet/src/app.rs
           test "$(sw_vers -productVersion | cut -d. -f1)" = 27
           xcodebuild -version
-          xcodebuild -version | grep -Eq 'Xcode 27(\.|$)'
+          xcodebuild -version > "$RUNNER_TEMP/xcode-version.txt"
+          cat "$RUNNER_TEMP/xcode-version.txt"
+          grep -Eq 'Xcode 27(\.|$)' "$RUNNER_TEMP/xcode-version.txt"
       - name: Install pinned Rust and XcodeGen
         run: |
           set -euo pipefail
