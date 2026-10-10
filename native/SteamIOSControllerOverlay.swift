@@ -19,7 +19,9 @@ final class InputSettings: ObservableObject {
         didSet {
             UserDefaults.standard.set(controllerOverlayEnabled, forKey: "gtaios.steamios.controls.enabled")
             if !controllerOverlayEnabled {
-                SteamIOSGamepadInput.shared.configureTouch(controls: [])
+                Task { @MainActor in
+                    SteamIOSGamepadInput.shared.configureTouch(controls: [])
+                }
             }
         }
     }
@@ -547,16 +549,16 @@ struct TouchControlsOverlay: View {
             .contentShape(Rectangle())
             .gesture(scalePinch, including: m.editing ? .all : .subviews)
             .onAppear { configureGamepad(landscape: landscape) }
-            .onChange(of: geo.size) { _, _ in configureGamepad(landscape: landscape) }
-            .onChange(of: m.controls) { _, _ in configureGamepad(landscape: landscape) }
-            .onChange(of: input.controllerOverlayEnabled) { _, enabled in
+            .onChange(of: geo.size) { _ in configureGamepad(landscape: landscape) }
+            .onChange(of: m.controls) { _ in configureGamepad(landscape: landscape) }
+            .onChange(of: input.controllerOverlayEnabled) { enabled in
                 if !enabled {
                     m.editing = false
                     m.selected = nil
                 }
                 configureGamepad(landscape: landscape)
             }
-            .onChange(of: m.editing) { _, _ in configureGamepad(landscape: landscape) }
+            .onChange(of: m.editing) { _ in configureGamepad(landscape: landscape) }
             .onDisappear { SteamIOSGamepadInput.shared.configureTouch(controls: []) }
         }
         .ignoresSafeArea()
@@ -619,13 +621,32 @@ struct TouchControlsOverlay: View {
 struct GlassShape: View {
     var circle = false
     var body: some View {
+        // SteamIOS Liquid Glass when compiled against the iOS 26 SDK.
+        // Older Xcode images compile a material fallback instead.
+        #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
-            if circle { Circle().fill(.clear).glassEffect(.regular, in: Circle()) }
-            else { RoundedRectangle(cornerRadius: 18).fill(.clear)
-                     .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 18)) }
+            if circle {
+                Circle().fill(.clear).glassEffect(.regular, in: Circle())
+            } else {
+                RoundedRectangle(cornerRadius: 18).fill(.clear)
+                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 18))
+            }
         } else {
-            if circle { Circle().fill(.ultraThinMaterial) }
-            else { RoundedRectangle(cornerRadius: 18).fill(.ultraThinMaterial) }
+            fallback
+        }
+        #else
+        fallback
+        #endif
+    }
+    private var fallback: some View {
+        Group {
+            if circle {
+                Circle().fill(.ultraThinMaterial)
+                    .overlay(Circle().stroke(.white.opacity(0.27), lineWidth: 1))
+            } else {
+                RoundedRectangle(cornerRadius: 18).fill(.ultraThinMaterial)
+                    .overlay(RoundedRectangle(cornerRadius: 18).stroke(.white.opacity(0.18), lineWidth: 1))
+            }
         }
     }
 }
@@ -701,10 +722,10 @@ struct TouchControlButton: View {
             }
         }
         .onDisappear { if control.action.isPad { padVector = .zero; isDown = false } }
-        .onChange(of: m.editing) { _, _ in if control.action.isPad { padVector = .zero; isDown = false } }
-        .onChange(of: screen) { _, _ in if control.action.isPad { padVector = .zero; isDown = false } }
-        .onChange(of: control.action) { old, new in
-            if old.isPad || new.isPad { padVector = .zero; isDown = false }
+        .onChange(of: m.editing) { _ in if control.action.isPad { padVector = .zero; isDown = false } }
+        .onChange(of: screen) { _ in if control.action.isPad { padVector = .zero; isDown = false } }
+        .onChange(of: control.action) { _ in
+            padVector = .zero; isDown = false
         }
         .position(x: CGFloat(control.nx) * screen.width,
                   y: CGFloat(control.ny) * screen.height)
