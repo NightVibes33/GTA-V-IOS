@@ -571,7 +571,9 @@ enum TouchControlsHost {
     static func setHidden(_ hidden: Bool) {
         productHidden = hidden
         window?.isHidden = hidden
-        if hidden { SteamIOSGamepadInput.shared.stop() }
+        if hidden {
+            Task { @MainActor in SteamIOSGamepadInput.shared.stop() }
+        }
     }
 
     static func attach() {
