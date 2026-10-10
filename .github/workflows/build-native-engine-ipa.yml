@@ -40,6 +40,11 @@ jobs:
           set -euo pipefail
           echo '11ca8d2c04c5e843d18ff4aea4899d72c86973c6b031df334e67c446b2ae83e0  .engine-input/game.wasm' | shasum -a 256 -c -
           python3 native/prepare_muguet.py
+          python3 native/patch_winit_scene.py
+          plutil -lint native/Muguet/ios/Info.plist
+          /usr/libexec/PlistBuddy -c 'Print :UIApplicationSceneManifest:UISceneConfigurations:UIWindowSceneSessionRoleApplication:0:UISceneDelegateClassName' native/Muguet/ios/Info.plist | grep -Fxq GTAIOSSceneDelegate
+          grep -Fq 'initWithWindowScene:' native/Muguet/vendor/winit/src/platform_impl/ios/window.rs
+          grep -Fq 'winit = { path = "vendor/winit" }' native/Muguet/Cargo.toml
           grep -Fq 'GTAiOS Developer' native/Muguet/ios/GTAFiveTabLauncher.swift
           if grep -Fq 'Engine & Acknowledgements' native/Muguet/ios/GTAFiveTabLauncher.swift; then
             echo 'Unexpected upstream credits section in user interface' >&2
@@ -48,6 +53,8 @@ jobs:
           grep -Fq 'NightVibes33-github-avatar' native/Muguet/ios/GTAFiveTabLauncher.swift
           grep -Fq 'https://github.com/NightVibes33' native/Muguet/ios/GTAFiveTabLauncher.swift
           grep -Fq 'GTAFiveTabController()' native/Muguet/ios/Launcher.swift
+          grep -Fq '@objc(GTAIOSSceneDelegate)' native/Muguet/ios/Launcher.swift
+          grep -Fq 'gtaios_active_window_scene' native/Muguet/ios/Launcher.swift
           grep -Fq 'TouchControlsOverlay' native/Muguet/ios/SteamIOSControllerOverlay.swift
           grep -Fq 'ControlPresetsModel' native/Muguet/ios/SteamIOSControllerOverlay.swift
           grep -Fq 'GlassEffectContainer(spacing: 12)' native/Muguet/ios/SteamIOSControllerOverlay.swift
@@ -132,6 +139,8 @@ jobs:
           /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist" | grep -Fxq com.nightvibes33.gtaios
           /usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$APP/Info.plist" | grep -Fxq GTAiOS
           /usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$APP/Info.plist" | grep -Fxq 'GTA V iOS'
+          /usr/libexec/PlistBuddy -c 'Print :UIApplicationSceneManifest:UISceneConfigurations:UIWindowSceneSessionRoleApplication:0:UISceneDelegateClassName' "$APP/Info.plist" | grep -Fxq GTAIOSSceneDelegate
+          strings "$APP/muguet" | grep -Fq GTAIOSSceneDelegate
           /usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$APP/Info.plist" | grep -Fxq '18.0'
           ! /usr/libexec/PlistBuddy -c 'Print :UISupportedInterfaceOrientations' "$APP/Info.plist" | grep -Fq Portrait
           /usr/libexec/PlistBuddy -c 'Print :UISupportedInterfaceOrientations' "$APP/Info.plist" | grep -Fq LandscapeRight
