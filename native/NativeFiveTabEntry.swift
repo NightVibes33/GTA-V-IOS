@@ -54,6 +54,8 @@ enum NativeRuntimeBridge {
         }
         do {
             try NativeMuguetSettings.save()
+            TouchControlsModel.shared.ensureDefaultLayout()
+            SteamIOSGamepadInput.shared.reserveSessionSlot()
             LogStore.shared.write("native", "Starting embedded engine with external game library")
             GTAIOSLandscape.enforce { launch?() }
         } catch {
@@ -294,7 +296,7 @@ final class GTANativeControlsViewController: GTAReferencePage {
         panel.addArrangedSubview(row)
         stack.addArrangedSubview(panel)
         let overlay = UISwitch()
-        overlay.isOn = InputSettings.shared.controllerOverlayEnabled
+        overlay.isOn = TouchControlsModel.shared.visible
         let overlayRow = UIStackView()
         overlayRow.axis = .horizontal
         overlayRow.alignment = .center
@@ -302,7 +304,7 @@ final class GTANativeControlsViewController: GTAReferencePage {
         overlayRow.addArrangedSubview(UIView())
         overlayRow.addArrangedSubview(overlay)
         overlay.addAction(UIAction { _ in
-            InputSettings.shared.controllerOverlayEnabled = overlay.isOn
+            TouchControlsModel.shared.visible = overlay.isOn
             LogStore.shared.write("controls", "SteamIOS touch overlay enabled=\(overlay.isOn)")
         }, for: .valueChanged)
         panel.addArrangedSubview(overlayRow)
