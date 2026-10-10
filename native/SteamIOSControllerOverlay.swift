@@ -17,6 +17,19 @@ private func muguet_steamios_packet_count() -> UInt64
 @_silgen_name("muguet_steamios_text")
 private func muguet_steamios_text(_ character: UInt16)
 
+// GTAiOS Controls tab shares SteamIOS's actual persisted visibility flag.
+// This wrapper does not maintain a separate cosmetic switch.
+@MainActor final class InputSettings {
+    static let shared = InputSettings()
+    var controllerOverlayEnabled: Bool {
+        get { TouchControlsModel.shared.visible }
+        set {
+            TouchControlsModel.shared.visible = newValue
+            if !newValue { SteamIOSGamepadInput.shared.stop() }
+        }
+    }
+}
+
 @MainActor final class SteamIOSGamepadInput {
     static let shared = SteamIOSGamepadInput()
     private var state = TouchGamepadState()
@@ -2032,6 +2045,7 @@ struct ControlLayoutMenu: View {
 
 // GTA native input bridge supports the same controller layout model.
 enum GamepadInput {
+    static let keyboardMouseAvailable = true
     static let touchEnabled = true
     static func flag(_ name: String) -> Bool {
         ["MADEIRA_CONTROL_PRESETS", "MADEIRA_CONTROLS_EDITOR_DONE"].contains(name)
