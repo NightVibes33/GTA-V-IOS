@@ -317,3 +317,21 @@ pub fn steamios_text(character: u16) {
 
 pub fn publish(block: u64) {''')
 print("SteamIOS native touch overlay and physical/touch input merge integrated")
+
+# GTA V iOS supports iPhone iOS 18 through iOS 27. The build host is the
+# GitHub-hosted Xcode 27 image, which runs macOS 27 (arm64). Apply the same
+# minimum to Rust, the statically linked Swift controller, the app bundle,
+# and the Mach-O loader command, not merely Info.plist display metadata.
+replace("ios/project.yml",
+        '    iOS: "15.0"',
+        '    iOS: "18.0"')
+replace("ios/project.yml",
+        'xcrun vtool -set-build-version ios 15.0 26.0 -replace',
+        'xcrun vtool -set-build-version ios 18.0 27.0 -replace')
+replace("make-ios.sh",
+        'IPHONEOS_DEPLOYMENT_TARGET=15.0 cargo',
+        'IPHONEOS_DEPLOYMENT_TARGET=18.0 cargo')
+replace("build.rs",
+        '"-target", "arm64-apple-ios15.0",',
+        '"-target", "arm64-apple-ios18.0",')
+print("iOS >=18 native target (Rust/Swift/Xcode/Mach-O); macOS 27 Xcode 27 runner")

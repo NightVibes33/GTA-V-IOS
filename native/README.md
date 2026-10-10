@@ -53,3 +53,7 @@ The local library inspection found all 5,814 manifest entries (20,944,285,552
 expected bytes). Two non-final HTML documentation files differ from manifest
 sizes by two bytes each. The check reports these differences and does not modify
 the library. Engine SHA-256 and shader index presence matched the build input.
+
+## Deployment compatibility
+
+The `ios-usb-port` GTA V iOS build targets iPhone **iOS 18.0 through iOS 27** (minimum deployment target 18.0), using GitHub Actions' **`xcode-27` runner on macOS 27**. The target is applied to native Rust, Swift, the Xcode-generated app, and the Mach-O load command. The pinned Muguet runtime and the external-files model remain unchanged. Version support is a deployment setting; iPhone gameplay and controller functionality require device verification.
