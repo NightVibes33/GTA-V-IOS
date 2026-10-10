@@ -471,9 +471,8 @@ final class TouchControlsModel: ObservableObject {
 final class ControlsWindow: UIWindow {
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         let m = TouchControlsModel.shared
-        // The controller/editor is landscape-only. Portrait draws nothing here,
-        // so the transparent UIWindow must NEVER trap Steam's touchscreen.
-        guard bounds.width > bounds.height else { return nil }
+        // GTA V iOS is landscape-only. Never disable hit testing during an
+        // in-flight scene geometry update; doing so loses all controller input.
         // Edit mode owns the landscape screen: drags and the scale pinch must not
         // leak through and swing the camera while controls are being arranged.
         if m.editing { return super.hitTest(point, with: event) }
@@ -530,8 +529,9 @@ struct TouchControlsOverlay: View {
 
     var body: some View {
         GeometryReader { geo in
-            // Landscape only; portrait keeps the existing key row and joystick.
-            let landscape = geo.size.width > geo.size.height
+            // The host enforces landscape at Info.plist, controller and scene.
+            // Always render controls during the geometry transaction.
+            let landscape = true
             ZStack(alignment: .top) {
                 if landscape {
                     if input.controllerOverlayEnabled || m.editing {
@@ -565,7 +565,7 @@ struct TouchControlsOverlay: View {
     }
 
     private func configureGamepad(landscape: Bool) {
-        let ids = landscape && input.controllerOverlayEnabled && !m.editing
+        let ids = input.controllerOverlayEnabled && !m.editing
             ? m.controls.filter { $0.action.padName.map(TouchPadAction.supported) ?? false }.map(\.id) : []
         SteamIOSGamepadInput.shared.configureTouch(controls: Set(ids))
     }
@@ -651,6 +651,58 @@ struct GlassShape: View {
     }
 }
 
+struct JoystickFace: View {
+    var held: Bool
+    var dir: Int
+    /// ml646: the portrait pad grows out of a key-sized ring when you hold it.
+    /// An overlay stick is a PERMANENT control — it must be full size at rest
+    /// with only the knob moving, so size is decoupled from press here rather
+    /// than faked by passing held:true (which would also kill the knob travel
+    /// and the press styling).
+    var alwaysExpanded = false
+    private var expanded: Bool { held || alwaysExpanded }
+
+    static let idleDiameter: CGFloat = 22
+    static let padRadius: CGFloat = 58
+    private var idleDiameter: CGFloat { Self.idleDiameter }
+    private var padRadius: CGFloat { Self.padRadius }
+    private let knobTravelRatio: CGFloat = 0.30
+
+    private var interior: some View { GlassShape(circle: true) }
+
+    private func knobOffset(_ d: CGFloat) -> CGSize {
+        guard dir >= 0, expanded else { return .zero }
+        let travel = d * knobTravelRatio
+        let a = Double(dir) * 45.0 * .pi / 180.0
+        return CGSize(width: travel * CGFloat(sin(a)), height: -travel * CGFloat(cos(a)))
+    }
+
+    var body: some View {
+        let d = expanded ? padRadius * 2 : idleDiameter
+        return ZStack {
+            interior
+            Circle().strokeBorder(Color.white.opacity(0.55), lineWidth: expanded ? 2 : 1.5)
+            Circle()
+                .fill(Color.white)
+                .frame(width: d * 0.42, height: d * 0.42)
+                .overlay(
+                    // Roundness cue. It reads at key size but turns into a
+                    // smudge on the big pad, so it fades out as the ring
+                    // springs open rather than scaling up with it.
+                    Circle()
+                        .trim(from: 0.55, to: 0.70)
+                        .stroke(Color.black.opacity(0.38),
+                                style: StrokeStyle(lineWidth: 1.4, lineCap: .round))
+                        .padding(d * 0.075)
+                        .opacity(expanded ? 0 : 1)
+                )
+                .offset(knobOffset(d))
+        }
+        .frame(width: d, height: d)
+    }
+}
+
+
 struct TouchControlButton: View {
     let control: TouchControl
     let screen: CGSize
@@ -673,10 +725,10 @@ struct TouchControlButton: View {
                     .offset(x: padVector.width * diameter * 0.29, y: padVector.height * diameter * 0.29)
                 Text(control.action.label).font(.caption).foregroundStyle(.white.opacity(0.8))
             } else if control.action.stickKeys != nil {
-                GlassShape(circle: true)
-                Circle().fill(.white.opacity(isDown ? 0.55 : 0.25))
-                    .frame(width: diameter * 0.42, height: diameter * 0.42)
-                Text(control.action.label).font(.caption).foregroundStyle(.white.opacity(0.8))
+                JoystickFace(held: isDown, dir: stickDir, alwaysExpanded: true)
+                    .frame(width: JoystickFace.padRadius * 2,
+                           height: JoystickFace.padRadius * 2)
+                    .scaleEffect(diameter / (JoystickFace.padRadius * 2))
             } else {
                 GlassShape(circle: true)
                 Text(control.action.label)
@@ -999,3 +1051,53 @@ struct MappingPanel: View {
     }
 }
 
+
+
+// The entire original SteamIOS editor, previewed without launching GTA V.
+// Live gamepad input is neutral while editing, never sent to a fake game.
+final class SteamIOSControllerEditorViewController: UIViewController {
+    private var host: UIHostingController<TouchControlsOverlay>?
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .landscape }
+    override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation { .landscapeRight }
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = UIColor(red: 0.025, green: 0.045, blue: 0.075, alpha: 1)
+        TouchControlsModel.shared.ensureDefaultLayout()
+        TouchControlsModel.shared.editing = true
+        TouchControlsModel.shared.selected = nil
+        let hosting = UIHostingController(rootView: TouchControlsOverlay())
+        hosting.view.backgroundColor = .clear
+        hosting.view.translatesAutoresizingMaskIntoConstraints = false
+        addChild(hosting)
+        view.addSubview(hosting.view)
+        NSLayoutConstraint.activate([
+            hosting.view.topAnchor.constraint(equalTo: view.topAnchor),
+            hosting.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            hosting.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            hosting.view.trailingAnchor.constraint(equalTo: view.trailingAnchor)
+        ])
+        hosting.didMove(toParent: self)
+        host = hosting
+        let back = UIButton(type: .system)
+        var style = UIButton.Configuration.filled()
+        style.title = "Back to Controls"
+        style.baseBackgroundColor = UIColor.black.withAlphaComponent(0.75)
+        style.baseForegroundColor = .white
+        back.configuration = style
+        back.translatesAutoresizingMaskIntoConstraints = false
+        back.addAction(UIAction { [weak self] _ in self?.dismiss(animated: true) }, for: .touchUpInside)
+        view.addSubview(back)
+        NSLayoutConstraint.activate([
+            back.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
+            back.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -12)
+        ])
+        LogStore.shared.write("controls", "Full SteamIOS controller layout editor opened")
+    }
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        TouchControlsModel.shared.editing = false
+        TouchControlsModel.shared.selected = nil
+        SteamIOSGamepadInput.shared.stop()
+        LogStore.shared.write("controls", "SteamIOS controller layout editor closed")
+    }
+}

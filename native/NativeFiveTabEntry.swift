@@ -305,15 +305,11 @@ final class GTANativeControlsViewController: GTAReferencePage {
         }, for: .valueChanged)
         panel.addArrangedSubview(overlayRow)
         let edit = GTAReference.control("Edit SteamIOS Controller Layout", symbol: "slider.horizontal.3")
-        edit.addAction(UIAction { _ in
-            TouchControlsModel.shared.ensureDefaultLayout()
-            TouchControlsModel.shared.editing = true
-            TouchControlsModel.shared.selected = nil
-            InputSettings.shared.controllerOverlayEnabled = true
-            overlay.isOn = true
-            GTAReference.present("Controller editor ready",
-                message: "Press Play; the SteamIOS layout editor will appear over native gameplay in landscape. Drag controls, pinch to resize, tap a control to remap, and select Done to save.",
-                from: self)
+        edit.addAction(UIAction { [weak self] _ in
+            guard let self else { return }
+            let editor = SteamIOSControllerEditorViewController()
+            editor.modalPresentationStyle = .fullScreen
+            self.present(editor, animated: true)
         }, for: .touchUpInside)
         panel.addArrangedSubview(edit)
         let reset = GTAReference.control("Reset SteamIOS Layout", symbol: "arrow.counterclockwise")
@@ -323,7 +319,7 @@ final class GTANativeControlsViewController: GTAReferencePage {
         }, for: .touchUpInside)
         panel.addArrangedSubview(reset)
         stack.addArrangedSubview(GTAReference.label(
-            "Original SteamIOS glass overlay, dual analog sticks, buttons, and draggable mapping editor. Physical controllers remain supported through the native engine.",
+            "Your original SteamIOS controller overlay: edit immediately in landscape, reposition and resize every control, add/remove buttons and sticks, and remap keyboard/gamepad actions. Physical controllers remain supported.",
             size: 12, color: GTAReference.secondary))
     }
     private func addSlider(_ title: String, key: String, fallback: Double,
