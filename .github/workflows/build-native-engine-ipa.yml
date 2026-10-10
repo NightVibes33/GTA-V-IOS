@@ -66,6 +66,17 @@ jobs:
           xcodebuild -version > "$RUNNER_TEMP/xcode-version.txt"
           cat "$RUNNER_TEMP/xcode-version.txt"
           grep -Eq 'Xcode 27(\.|$)' "$RUNNER_TEMP/xcode-version.txt"
+      - name: Typecheck SteamIOS controller and GTA V iOS UI before native engine build
+        run: |
+          set -euo pipefail
+          cd native/Muguet
+          SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun --sdk iphoneos swiftc -parse-as-library -typecheck \
+            -target arm64-apple-ios18.0 -sdk "$SDK" \
+            -module-name GTAiOSFrontend \
+            ios/Launcher.swift ios/GTAFiveTabLauncher.swift \
+            ios/EngineOptions.swift ios/GTALaunchPreferences.swift \
+            ios/LogStore.swift ios/SteamIOSControllerOverlay.swift
       - name: Install pinned Rust and XcodeGen
         run: |
           set -euo pipefail
