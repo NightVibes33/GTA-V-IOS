@@ -233,3 +233,80 @@ replace("ios/Info.plist",
         '<string>UIInterfaceOrientationLandscapeRight</string>'
         '<string>UIInterfaceOrientationLandscapeLeft</string></array>')
 print("Native engine uses original GTAiOS five-tab UIKit UI and engine-backed settings")
+
+
+# Use the exact SteamIOS glass controller, persisted layout, and editor UI.
+# Its XInput transport cannot be linked to a native Muguet app; replace ONLY
+# that transport with Muguet's native gamepad/keyboard/mouse input.
+(source / "ios/SteamIOSControllerOverlay.swift").write_text(
+    (base / "SteamIOSControllerOverlay.swift").read_text(encoding="utf-8"), encoding="utf-8")
+replace("build.rs",
+        '"ios/LogStore.swift"])',
+        '"ios/LogStore.swift", "ios/SteamIOSControllerOverlay.swift"])')
+# The old hardcoded Muguet touch layout must not coexist with SteamIOS.
+replace("src/app.rs",
+        'crate::touch::install(&window);',
+        'crate::touch::release(); // SteamIOS UIWindow owns all touch controls')
+replace("src/pad.rs",
+        '''    let Some(gp) = gamepad() else {
+        if ACTIVE.swap(false, Ordering::Relaxed) {
+            if let Some(st) = STATE.lock().unwrap().take() { release(st); }
+            eprintln!("[pad] controller disconnected");
+        }
+        return false;
+    };
+    if !ACTIVE.swap(true, Ordering::Relaxed) {
+        eprintln!("[pad] controller connected");
+    }''',
+        '''    let gp = gamepad();
+    let steamios = *STEAMIOS_TOUCH.lock().unwrap();
+    if gp.is_none() && !steamios.enabled {
+        if ACTIVE.swap(false, Ordering::Relaxed) {
+            if let Some(st) = STATE.lock().unwrap().take() { release(st); }
+            HORN_PAD.store(false, Ordering::Relaxed);
+            eprintln!("[pad] controller disconnected");
+        } else if let Some(st) = STATE.lock().unwrap().take() {
+            release(st);
+            HORN_PAD.store(false, Ordering::Relaxed);
+        }
+        return false;
+    }
+    if gp.is_some() {
+        if !ACTIVE.swap(true, Ordering::Relaxed) {
+            eprintln!("[pad] physical controller connected");
+        }
+    } else {
+        ACTIVE.store(false, Ordering::Relaxed);
+    }''')
+replace("src/pad.rs",
+        '''    unsafe {
+        let ls = gp.leftThumbstick();''',
+        '''    if let Some(gp) = gp {
+    unsafe {
+        let ls = gp.leftThumbstick();''')
+replace("src/pad.rs",
+        '''    }
+
+    if cfg!(target_os = "ios") { input::set_locked(true); }''',
+        '''    }
+    }
+    steamios_apply_touch(steamios, &mut keys, &mut buttons, in_car, dt);
+
+    if cfg!(target_os = "ios") { input::set_locked(true); }''')
+(source / "src/pad.rs").write_text(
+    (source / "src/pad.rs").read_text(encoding="utf-8") + "\n" +
+    (base / "SteamIOSPadRuntime.rs").read_text(encoding="utf-8"),
+    encoding="utf-8")
+replace("src/input.rs",
+        '''pub fn publish(block: u64) {''',
+        '''// Direct VK codes from SteamIOS's mapping editor. This is the same
+// guest input block used by native physical-controller mappings.
+pub fn steamios_virtual_key(vk: u8, pressed: bool) {
+    if vk == 0x0d && pressed { start_menu_key("Enter"); }
+    if let Some(value) = key_byte(vk) {
+        value.store(if pressed { 0x80 } else { 0 }, Ordering::SeqCst);
+    }
+}
+
+pub fn publish(block: u64) {''')
+print("SteamIOS native touch overlay and physical/touch input merge integrated")

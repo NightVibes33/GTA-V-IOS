@@ -47,6 +47,9 @@ jobs:
           grep -Fq 'NightVibes33-github-avatar' native/Muguet/ios/GTAFiveTabLauncher.swift
           grep -Fq 'https://github.com/NightVibes33' native/Muguet/ios/GTAFiveTabLauncher.swift
           grep -Fq 'GTAFiveTabController()' native/Muguet/ios/Launcher.swift
+          grep -Fq 'TouchControlsOverlay' native/Muguet/ios/SteamIOSControllerOverlay.swift
+          grep -Fq 'muguet_steamios_pad_update' native/Muguet/src/pad.rs
+          ! grep -Fq 'crate::touch::install(&window)' native/Muguet/src/app.rs
           xcodebuild -version
       - name: Install pinned Rust and XcodeGen
         run: |

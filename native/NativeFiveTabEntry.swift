@@ -46,7 +46,12 @@ public func muguetShowLauncher(_ viewController: UnsafeMutableRawPointer,
     launcher.isModalInPresentation = true
     NativeRuntimeBridge.launch = { [weak launcher] in
         guard let launcher else { return }
-        launcher.dismiss(animated: false) { done() }
+        launcher.dismiss(animated: false) {
+            done()
+            // Attach SteamIOS's own glass controls above the native Metal
+            // window, after the portrait GTAiOS launcher has disappeared.
+            DispatchQueue.main.async { TouchControlsHost.attach() }
+        }
         NativeRuntimeBridge.launch = nil
     }
     parent.present(launcher, animated: false)
@@ -260,7 +265,40 @@ final class GTANativeControlsViewController: GTAReferencePage {
         }, for: .valueChanged)
         panel.addArrangedSubview(row)
         stack.addArrangedSubview(panel)
-        stack.addArrangedSubview(GTAReference.label("Settings apply to the next native gameplay launch. Hardware gamepads and touch input are handled by the engine.", size: 12, color: GTAReference.secondary))
+        let overlay = UISwitch()
+        overlay.isOn = InputSettings.shared.controllerOverlayEnabled
+        let overlayRow = UIStackView()
+        overlayRow.axis = .horizontal
+        overlayRow.alignment = .center
+        overlayRow.addArrangedSubview(GTAReference.label("SteamIOS custom touch controller", size: 14))
+        overlayRow.addArrangedSubview(UIView())
+        overlayRow.addArrangedSubview(overlay)
+        overlay.addAction(UIAction { _ in
+            InputSettings.shared.controllerOverlayEnabled = overlay.isOn
+            LogStore.shared.write("controls", "SteamIOS touch overlay enabled=\(overlay.isOn)")
+        }, for: .valueChanged)
+        panel.addArrangedSubview(overlayRow)
+        let edit = GTAReference.control("Edit SteamIOS Controller Layout", symbol: "slider.horizontal.3")
+        edit.addAction(UIAction { _ in
+            TouchControlsModel.shared.ensureDefaultLayout()
+            TouchControlsModel.shared.editing = true
+            TouchControlsModel.shared.selected = nil
+            InputSettings.shared.controllerOverlayEnabled = true
+            overlay.isOn = true
+            GTAReference.present("Controller editor ready",
+                message: "Press Play; the SteamIOS layout editor will appear over native gameplay in landscape. Drag controls, pinch to resize, tap a control to remap, and select Done to save.",
+                from: self)
+        }, for: .touchUpInside)
+        panel.addArrangedSubview(edit)
+        let reset = GTAReference.control("Reset SteamIOS Layout", symbol: "arrow.counterclockwise")
+        reset.addAction(UIAction { _ in
+            TouchControlsModel.shared.resetDefaultLayout()
+            LogStore.shared.write("controls", "SteamIOS touch layout reset to original default")
+        }, for: .touchUpInside)
+        panel.addArrangedSubview(reset)
+        stack.addArrangedSubview(GTAReference.label(
+            "Original SteamIOS glass overlay, dual analog sticks, buttons, and draggable mapping editor. Physical controllers remain supported through the native engine.",
+            size: 12, color: GTAReference.secondary))
     }
     private func addSlider(_ title: String, key: String, fallback: Double,
                            min: Double, max: Double, panel: UIStackView) {
