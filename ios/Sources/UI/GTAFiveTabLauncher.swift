@@ -345,16 +345,8 @@ final class GTAFiveTabController: UITabBarController {
         chooseSnapshotTab()
         #endif
     }
-    override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
-        if let nav = selectedViewController as? UINavigationController,
-           nav.topViewController is GameViewController { return .allButUpsideDown }
-        return .portrait
-    }
-    override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation {
-        if let nav = selectedViewController as? UINavigationController,
-           nav.topViewController is GameViewController { return .landscapeRight }
-        return .portrait
-    }
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .landscape }
+    override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation { .landscapeRight }
     func select(_ index: Int) { selectedIndex = index }
     #if targetEnvironment(simulator)
     private func chooseSnapshotTab() {

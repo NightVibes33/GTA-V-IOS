@@ -89,19 +89,9 @@ launcher = (project / "ios/Sources/UI/GTAFiveTabLauncher.swift").read_text(encod
 launcher = launcher.replace("GameNavigationController(rootViewController: entry.0)",
                             "UINavigationController(rootViewController: entry.0)")
 launcher = launcher.replace("ControllerSettingsViewController()", "GTANativeControlsViewController()")
-launcher = launcher.replace(
-    '''    override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
-        if let nav = selectedViewController as? UINavigationController,
-           nav.topViewController is GameViewController { return .allButUpsideDown }
-        return .portrait
-    }
-    override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation {
-        if let nav = selectedViewController as? UINavigationController,
-           nav.topViewController is GameViewController { return .landscapeRight }
-        return .portrait
-    }''',
-    '''    override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .portrait }
-    override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation { .portrait }''')
+# The GTAiOS launcher and engine must both reject portrait.
+assert 'supportedInterfaceOrientations: UIInterfaceOrientationMask { .landscape }' in launcher
+assert 'preferredInterfaceOrientationForPresentation: UIInterfaceOrientation { .landscapeRight }' in launcher
 old_navigation = """        navigationController?.setNavigationBarHidden(false, animated: true)
         let gameplay = GameViewController()
         gameplay.hidesBottomBarWhenPushed = true
@@ -224,14 +214,11 @@ replace("ios/Info.plist",
 replace("ios/project.yml",
         '- path: ../../../ios/Sources/Resources/Assets.xcassets',
         '- path: ../LICENSE\n      - path: ../../../ios/Sources/Resources/Assets.xcassets')
-replace("ios/Info.plist",
-        '<key>UISupportedInterfaceOrientations</key>\n'
-        '  <array><string>UIInterfaceOrientationLandscapeRight</string>'
-        '<string>UIInterfaceOrientationLandscapeLeft</string></array>',
-        '<key>UISupportedInterfaceOrientations</key>\n'
-        '  <array><string>UIInterfaceOrientationPortrait</string>'
-        '<string>UIInterfaceOrientationLandscapeRight</string>'
-        '<string>UIInterfaceOrientationLandscapeLeft</string></array>')
+# The pinned Muguet plist already supports landscape right and left only.
+plist = (source / "ios/Info.plist").read_text(encoding="utf-8")
+assert '<string>UIInterfaceOrientationPortrait</string>' not in plist
+assert '<string>UIInterfaceOrientationLandscapeRight</string>' in plist
+assert '<string>UIInterfaceOrientationLandscapeLeft</string>' in plist
 print("Native engine uses original GTAiOS five-tab UIKit UI and engine-backed settings")
 
 

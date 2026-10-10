@@ -48,6 +48,9 @@ jobs:
           grep -Fq 'https://github.com/NightVibes33' native/Muguet/ios/GTAFiveTabLauncher.swift
           grep -Fq 'GTAFiveTabController()' native/Muguet/ios/Launcher.swift
           grep -Fq 'TouchControlsOverlay' native/Muguet/ios/SteamIOSControllerOverlay.swift
+          grep -Fq 'GTAIOSLandscape.enforce' native/Muguet/ios/Launcher.swift
+          ! grep -Fq 'UIInterfaceOrientationPortrait' native/Muguet/ios/Info.plist
+          grep -Fq 'UIInterfaceOrientationLandscapeRight' native/Muguet/ios/Info.plist
           grep -Fq 'muguet_steamios_pad_update' native/Muguet/src/pad.rs
           ! grep -Fq 'crate::touch::install(&window)' native/Muguet/src/app.rs
           xcodebuild -version
@@ -106,6 +109,8 @@ jobs:
           /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist" | grep -Fxq com.nightvibes33.gtaios
           /usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$APP/Info.plist" | grep -Fxq GTAiOS
           /usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$APP/Info.plist" | grep -Fxq 'GTA V iOS'
+          ! /usr/libexec/PlistBuddy -c 'Print :UISupportedInterfaceOrientations' "$APP/Info.plist" | grep -Fq Portrait
+          /usr/libexec/PlistBuddy -c 'Print :UISupportedInterfaceOrientations' "$APP/Info.plist" | grep -Fq LandscapeRight
           (cd "$STAGE" && zip -qry "$GITHUB_WORKSPACE/GTAiOS.ipa" Payload)
           python3 native/verify_external_assets.py --ipa GTAiOS.ipa
           xcrun otool -l "$STAGE/Payload/GTAiOS.app/muguet" > "$RUNNER_TEMP/native-engine-mach-o.txt"

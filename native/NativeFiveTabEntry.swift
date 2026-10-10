@@ -17,6 +17,29 @@ private func muguet_has_game_code() -> Bool
 @_silgen_name("muguet_unmount_external")
 private func muguet_unmount_external()
 
+enum GTAIOSLandscape {
+    static func enforce(_ finished: @escaping () -> Void) {
+        guard let scene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first(where: { $0.activationState == .foregroundActive }) else {
+            LogStore.shared.write("orientation", "Landscape scene not available")
+            finished()
+            return
+        }
+        if #available(iOS 16.0, *) {
+            scene.requestGeometryUpdate(UIWindowScene.GeometryPreferences.iOS(
+                interfaceOrientations: .landscapeRight)) { error in
+                LogStore.shared.write("orientation", "Landscape request error: \(error.localizedDescription)")
+            }
+        }
+        scene.windows.forEach { $0.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations() }
+        UIViewController.attemptRotationToDeviceOrientation()
+        DispatchQueue.main.async {
+            LogStore.shared.write("orientation", "Landscape requested; actual=\(scene.interfaceOrientation.rawValue)")
+            finished()
+        }
+    }
+}
 enum NativeRuntimeBridge {
     static var launch: (() -> Void)?
     static func play() {
@@ -30,7 +53,7 @@ enum NativeRuntimeBridge {
         do {
             try NativeMuguetSettings.save()
             LogStore.shared.write("native", "Starting embedded engine with external game library")
-            launch?()
+            GTAIOSLandscape.enforce { launch?() }
         } catch {
             LogStore.shared.write("native", "Settings write failed: \(error)")
         }
@@ -48,9 +71,12 @@ public func muguetShowLauncher(_ viewController: UnsafeMutableRawPointer,
         guard let launcher else { return }
         launcher.dismiss(animated: false) {
             done()
-            // Attach SteamIOS's own glass controls above the native Metal
-            // window, after the portrait GTAiOS launcher has disappeared.
-            DispatchQueue.main.async { TouchControlsHost.attach() }
+            DispatchQueue.main.async {
+                GTAIOSLandscape.enforce {
+                    TouchControlsHost.attach()
+                    LogStore.shared.write("controls", "SteamIOS gameplay overlay attached in landscape")
+                }
+            }
         }
         NativeRuntimeBridge.launch = nil
     }
