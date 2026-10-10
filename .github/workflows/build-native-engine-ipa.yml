@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   native-engine:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
@@ -49,6 +49,9 @@ jobs:
           grep -Fq 'GTAFiveTabController()' native/Muguet/ios/Launcher.swift
           grep -Fq 'TouchControlsOverlay' native/Muguet/ios/SteamIOSControllerOverlay.swift
           grep -Fq 'GTAIOSLandscape.enforce' native/Muguet/ios/Launcher.swift
+          grep -Fq 'muguet_steamios_text' native/Muguet/src/pad.rs
+          grep -Fq 'steamios_text(character' native/Muguet/src/input.rs
+          grep -Fq 'steamios_apply_touch(steamios' native/Muguet/src/pad.rs
           ! grep -Fq 'UIInterfaceOrientationPortrait' native/Muguet/ios/Info.plist
           grep -Fq 'UIInterfaceOrientationLandscapeRight' native/Muguet/ios/Info.plist
           grep -Fq 'muguet_steamios_pad_update' native/Muguet/src/pad.rs

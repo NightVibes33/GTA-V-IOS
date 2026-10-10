@@ -12,6 +12,10 @@ private func muguet_steamios_pad_update(_ connected: Bool, _ buttons: UInt16,
 private func muguet_steamios_key(_ vk: Int32, _ pressed: Bool)
 @_silgen_name("muguet_steamios_mouse")
 private func muguet_steamios_mouse(_ button: Int32, _ pressed: Bool)
+@_silgen_name("muguet_steamios_packet_count")
+private func muguet_steamios_packet_count() -> UInt64
+@_silgen_name("muguet_steamios_text")
+private func muguet_steamios_text(_ character: UInt16)
 
 final class InputSettings: ObservableObject {
     static let shared = InputSettings()
@@ -34,6 +38,7 @@ final class InputSettings: ObservableObject {
 @MainActor final class SteamIOSGamepadInput {
     static let shared = SteamIOSGamepadInput()
     private var state = TouchGamepadState()
+    private var lastDiagnostic = Date.distantPast
     func configureTouch(controls: Set<UUID>) { state.configure(controls); publish() }
     func touch(owner: UUID, control: UUID, value: GamepadSample?) {
         state.update(owner: owner, control: control, value: value)
@@ -43,6 +48,17 @@ final class InputSettings: ObservableObject {
     private func publish() {
         let p = state.sample
         muguet_steamios_pad_update(state.connected, p.buttons, p.lt, p.rt, p.lx, p.ly, p.rx, p.ry)
+        // Logs are real cross-language acknowledgements, not a simulated
+        // controller. A button/stick must reach Rust to advance packets.
+        let active = p.buttons != 0 || p.lt > 0 || p.rt > 0 ||
+                     p.lx != 0 || p.ly != 0 || p.rx != 0 || p.ry != 0
+        if active && Date().timeIntervalSince(lastDiagnostic) >= 2 {
+            lastDiagnostic = Date()
+            LogStore.shared.write("controls",
+                "SteamIOS -> native Rust packets=\(muguet_steamios_packet_count()) " +
+                "buttons=0x\(String(p.buttons, radix: 16)) LT=\(p.lt) RT=\(p.rt) " +
+                "sticks=\(p.lx),\(p.ly),\(p.rx),\(p.ry)")
+        }
     }
 }
 
@@ -56,16 +72,38 @@ private func winios_pointer(_ x: Int32, _ y: Int32, _ flags: Int32, _ data: Int3
     if flags & 16 != 0 { muguet_steamios_mouse(2, false) }
 }
 
+final class GTAIOSSteamKeyboardDelegate: NSObject, UITextFieldDelegate {
+    func textField(_ textField: UITextField, shouldChangeCharactersIn range: NSRange,
+                   replacementString replacement: String) -> Bool {
+        if replacement.isEmpty {
+            muguet_steamios_text(8) // Backspace
+        } else {
+            for scalar in replacement.utf16 { muguet_steamios_text(scalar) }
+        }
+        return false // Keep a clean input view; guest receives characters.
+    }
+    func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+        muguet_steamios_text(13)
+        return false
+    }
+}
 enum GTAIOSSteamKeyboard {
     private static weak var input: UITextField?
+    private static let keyboardDelegate = GTAIOSSteamKeyboardDelegate()
     static func toggle() {
-        guard let root = UIApplication.shared.windows.first?.rootViewController?.view else { return }
+        let root = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .first(where: { $0.activationState == .foregroundActive })?
+            .windows.first(where: { $0.isKeyWindow })?.rootViewController?.view
+        guard let root else { return }
         if let input, input.isFirstResponder { input.resignFirstResponder(); return }
         let field: UITextField
         if let input { field = input }
         else {
             field = UITextField(frame: CGRect(x: 0, y: 0, width: 1, height: 1))
             field.autocorrectionType = .no
+            field.autocapitalizationType = .none
+            field.spellCheckingType = .no
+            field.delegate = keyboardDelegate
             root.addSubview(field)
             self.input = field
         }
@@ -468,6 +506,20 @@ final class TouchControlsModel: ObservableObject {
 /// only ever draws. This one has to take input, so it discriminates: a hit that
 /// lands on the hosting root view means empty space, and empty space belongs to
 /// the game underneath — mouse-look must keep working between the buttons.
+
+final class SteamIOSInGameSettingsGesture: NSObject {
+    static let shared = SteamIOSInGameSettingsGesture()
+    @objc func openEditor(_ gesture: UITapGestureRecognizer) {
+        guard gesture.state == .ended else { return }
+        TouchControlsModel.shared.ensureDefaultLayout()
+        InputSettings.shared.controllerOverlayEnabled = true
+        TouchControlsModel.shared.editing = true
+        TouchControlsModel.shared.selected = nil
+        TouchControlsHost.attach()
+        LogStore.shared.write("controls", "SteamIOS in-game editor opened by three-finger tap")
+    }
+}
+
 final class ControlsWindow: UIWindow {
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         let m = TouchControlsModel.shared
@@ -489,6 +541,7 @@ enum TouchControlsHost {
     static func setHidden(_ hidden: Bool) {
         productHidden = hidden
         window?.isHidden = hidden
+        if hidden { SteamIOSGamepadInput.shared.stop() }
     }
 
     static func attach() {
@@ -513,6 +566,20 @@ enum TouchControlsHost {
         }
         window?.frame = scene.coordinateSpace.bounds
         window?.isHidden = productHidden
+        // Restore SteamIOS's in-game settings gesture. It is attached to the
+        // real Metal window, so empty game surface still receives normal taps.
+        if let gameplay = scene.windows.first(where: { $0 !== window && $0.windowLevel < .normal + 101 }),
+           let view = gameplay.rootViewController?.view {
+            let marker = "gtaios-steamios-three-finger-editor"
+            if !(view.gestureRecognizers ?? []).contains(where: { $0.name == marker }) {
+                let gesture = UITapGestureRecognizer(target: SteamIOSInGameSettingsGesture.shared,
+                                                      action: #selector(SteamIOSInGameSettingsGesture.openEditor(_:)))
+                gesture.numberOfTouchesRequired = 3
+                gesture.cancelsTouchesInView = false
+                gesture.name = marker
+                view.addGestureRecognizer(gesture)
+            }
+        }
         if !observingOrientation {
             observingOrientation = true
             NotificationCenter.default.addObserver(forName: UIDevice.orientationDidChangeNotification, object: nil, queue: .main) { _ in TouchControlsHost.attach() }

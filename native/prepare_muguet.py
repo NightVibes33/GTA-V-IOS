@@ -247,6 +247,13 @@ replace("src/pad.rs",
     }''',
         '''    let gp = gamepad();
     let steamios = *STEAMIOS_TOUCH.lock().unwrap();
+    // Preserve the real SteamIOS merge rule for connected physical pads.
+    let physical_sticks = gp.as_ref().map(|g| unsafe {
+        let ls = g.leftThumbstick();
+        let rs = g.rightThumbstick();
+        (ls.xAxis().value(), ls.yAxis().value(),
+         rs.xAxis().value(), rs.yAxis().value())
+    }).unwrap_or((0.0, 0.0, 0.0, 0.0));
     if gp.is_none() && !steamios.enabled {
         if ACTIVE.swap(false, Ordering::Relaxed) {
             if let Some(st) = STATE.lock().unwrap().take() { release(st); }
@@ -268,7 +275,8 @@ replace("src/pad.rs",
 replace("src/pad.rs",
         '''    unsafe {
         let ls = gp.leftThumbstick();''',
-        '''    if let Some(gp) = gp {
+        '''    HORN_PAD.store(false, Ordering::Relaxed);
+    if let Some(gp) = gp {
     unsafe {
         let ls = gp.leftThumbstick();''')
 replace("src/pad.rs",
@@ -277,7 +285,7 @@ replace("src/pad.rs",
     if cfg!(target_os = "ios") { input::set_locked(true); }''',
         '''    }
     }
-    steamios_apply_touch(steamios, &mut keys, &mut buttons, in_car, dt);
+    steamios_apply_touch(steamios, &mut keys, &mut buttons, in_car, dt, physical_sticks);
 
     if cfg!(target_os = "ios") { input::set_locked(true); }''')
 (source / "src/pad.rs").write_text(
@@ -292,6 +300,18 @@ pub fn steamios_virtual_key(vk: u8, pressed: bool) {
     if vk == 0x0d && pressed { start_menu_key("Enter"); }
     if let Some(value) = key_byte(vk) {
         value.store(if pressed { 0x80 } else { 0 }, Ordering::SeqCst);
+    }
+}
+pub fn steamios_text(character: u16) {
+    if let (Some(head), Some(tail), Some(b)) = (word(HEAD), word(TAIL), base()) {
+        let h = head.load(Ordering::SeqCst);
+        if (h.wrapping_sub(tail.load(Ordering::SeqCst)) as u32) < 64 {
+            unsafe {
+                std::ptr::write_volatile(
+                    b.add(296 + 2 * (h & 63) as usize) as *mut u16, character);
+            }
+            head.store(h.wrapping_add(1), Ordering::SeqCst);
+        }
     }
 }
 
