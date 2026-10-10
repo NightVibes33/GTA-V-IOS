@@ -4,6 +4,54 @@ import GameController
 import CoreHaptics
 import Metal
 
+@objc(GTAIOSSceneDelegate)
+final class GTAIOSSceneDelegate: UIResponder, UIWindowSceneDelegate {
+    var window: UIWindow?
+
+    func scene(_ scene: UIScene, willConnectTo session: UISceneSession,
+               options connectionOptions: UIScene.ConnectionOptions) {
+        LogStore.shared.write("scene", "Scene connected: \(session.persistentIdentifier)")
+    }
+
+    func sceneDidBecomeActive(_ scene: UIScene) {
+        NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification,
+                                        object: UIApplication.shared)
+        LogStore.shared.write("scene", "Scene active; native event loop resumed")
+    }
+
+    func sceneWillResignActive(_ scene: UIScene) {
+        NotificationCenter.default.post(name: UIApplication.willResignActiveNotification,
+                                        object: UIApplication.shared)
+    }
+
+    func sceneWillEnterForeground(_ scene: UIScene) {
+        NotificationCenter.default.post(name: UIApplication.willEnterForegroundNotification,
+                                        object: UIApplication.shared)
+    }
+
+    func sceneDidEnterBackground(_ scene: UIScene) {
+        NotificationCenter.default.post(name: UIApplication.didEnterBackgroundNotification,
+                                        object: UIApplication.shared)
+    }
+
+    func sceneDidDisconnect(_ scene: UIScene) {
+        LogStore.shared.write("scene", "Scene disconnected")
+    }
+}
+
+@_cdecl("gtaios_active_window_scene")
+public func gtaiosActiveWindowScene() -> UnsafeMutableRawPointer? {
+    let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+    guard let scene = scenes.first(where: { $0.activationState == .foregroundActive })
+        ?? scenes.first(where: { $0.activationState == .foregroundInactive })
+        ?? scenes.first else {
+        LogStore.shared.write("scene", "Winit requested a window without an active UIScene")
+        return nil
+    }
+    return Unmanaged.passUnretained(scene).toOpaque()
+}
+
+
 // Native Muguet build entry point. The visual interface is the project's
 // original five-tab UIKit GTAFiveTabLauncher, not upstream Muguet's SwiftUI UI.
 @_silgen_name("muguet_mount_external")
