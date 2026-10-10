@@ -312,8 +312,7 @@ final class GTAFiveTabController: UITabBarController {
         view.backgroundColor = GTAReference.night
         delegate = self
         let pages: [(UIViewController, String, String)] = [
-            (GTAReferenceHomeController(), "Home", "house.fill"),
-            (GTAReferenceLibraryController(), "Library", "folder.fill"),
+            (GTAReferenceLibraryController(), "Home", "house.fill"),
             (GTAReferenceGraphicsController(), "Graphics", "display"),
             (ControllerSettingsViewController(), "Controls", "gamecontroller.fill"),
             (GTAReferenceMoreController(), "More", "ellipsis")
@@ -361,10 +360,10 @@ final class GTAFiveTabController: UITabBarController {
     private func chooseSnapshotTab() {
         // Only used by GitHub simulator screenshots. No status values are mocked.
         let arguments = ProcessInfo.processInfo.arguments
-        if arguments.contains("--snapshot-library") { selectedIndex = 1 }
-        if arguments.contains("--snapshot-graphics") { selectedIndex = 2 }
-        if arguments.contains("--snapshot-controls") { selectedIndex = 3 }
-        if arguments.contains("--snapshot-more") { selectedIndex = 4 }
+        if arguments.contains("--snapshot-library") { selectedIndex = 0 }
+        if arguments.contains("--snapshot-graphics") { selectedIndex = 1 }
+        if arguments.contains("--snapshot-controls") { selectedIndex = 2 }
+        if arguments.contains("--snapshot-more") { selectedIndex = 3 }
     }
     #endif
 }
@@ -414,203 +413,6 @@ class GTAReferencePage: UIViewController {
     }
 }
 
-final class GTAReferenceHomeController: GTAReferencePage {
-    override var extendsHeroUnderStatusBar: Bool { true }
-    private let play = GTAVNeonLaunchButton(frame: .zero)
-    private let readiness = GTAReference.label("", size: 11, weight: .medium, color: GTAReference.secondary)
-    private let usbState = GTAReference.label("", size: 12, weight: .bold)
-    private let controllerState = GTAReference.label("", size: 12, weight: .bold)
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        // Reference-matched full-bleed GTA V artwork with a real, state-driven action.
-        let hero = UIView()
-        hero.clipsToBounds = true
-        hero.layer.cornerRadius = 17
-        hero.layer.cornerCurve = .continuous
-        hero.translatesAutoresizingMaskIntoConstraints = false
-        hero.heightAnchor.constraint(equalToConstant: 350).isActive = true
-        hero.backgroundColor = UIColor(red: 0.055, green: 0.073, blue: 0.10, alpha: 1)
-        // The original widescreen trio contains all three protagonists and
-        // the GTA V title. Preserve the WHOLE image instead of center-cropping
-        // Franklin and Trevor off the sides on a narrow iPhone screen.
-        let art = GTAReference.image("gtav-story-trio", height: 207, radius: 0)
-        art.contentMode = .scaleAspectFit
-        // One real Rockstar key-art image, displayed uncropped. The lower
-        // color treatment is a native control surface, not repeated wallpaper.
-        let surface = GTACinematicSurface()
-        surface.translatesAutoresizingMaskIntoConstraints = false
-        hero.addSubview(surface)
-        hero.addSubview(art)
-        NSLayoutConstraint.activate([
-            surface.topAnchor.constraint(equalTo: hero.topAnchor),
-            surface.bottomAnchor.constraint(equalTo: hero.bottomAnchor),
-            surface.leadingAnchor.constraint(equalTo: hero.leadingAnchor),
-            surface.trailingAnchor.constraint(equalTo: hero.trailingAnchor)
-        ])
-        let identity = UIStackView()
-        identity.axis = .vertical
-        identity.spacing = 0
-        identity.translatesAutoresizingMaskIntoConstraints = false
-        let name = GTAReference.label("GTAiOS", size: 23, weight: .black)
-        let brandSubtitle = GTAReference.label("GRAND THEFT AUTO V  ·  iPHONE", size: 9,
-                                          weight: .semibold, color: GTAReference.secondary)
-        identity.addArrangedSubview(name)
-        identity.addArrangedSubview(brandSubtitle)
-        hero.addSubview(identity)
-        let localBadge = GTAReference.label("LOCAL", size: 11,
-                                           weight: .heavy, color: GTAReference.green)
-        localBadge.translatesAutoresizingMaskIntoConstraints = false
-        hero.addSubview(localBadge)
-        NSLayoutConstraint.activate([
-            identity.leadingAnchor.constraint(equalTo: hero.leadingAnchor, constant: 13),
-            identity.topAnchor.constraint(equalTo: hero.topAnchor, constant: 8),
-            localBadge.trailingAnchor.constraint(equalTo: hero.trailingAnchor, constant: -13),
-            localBadge.topAnchor.constraint(equalTo: hero.topAnchor, constant: 17)
-        ])
-        let tagline = GTAReference.label("LOS SANTOS AWAITS  ·  GRAND THEFT AUTO V",
-                                         size: 10, weight: .bold, color: GTAReference.secondary)
-        tagline.textAlignment = .center
-        tagline.translatesAutoresizingMaskIntoConstraints = false
-        hero.addSubview(tagline)
-        NSLayoutConstraint.activate([
-            art.leadingAnchor.constraint(equalTo: hero.leadingAnchor),
-            art.trailingAnchor.constraint(equalTo: hero.trailingAnchor),
-            art.topAnchor.constraint(equalTo: hero.topAnchor, constant: 37),
-            tagline.leadingAnchor.constraint(equalTo: hero.leadingAnchor, constant: 12),
-            tagline.trailingAnchor.constraint(equalTo: hero.trailingAnchor, constant: -12),
-            tagline.topAnchor.constraint(equalTo: art.bottomAnchor, constant: 8)
-        ])
-        play.titleLabel?.font = .systemFont(ofSize: 19, weight: .bold)
-        play.layer.borderWidth = 1
-        play.layer.borderColor = GTAReference.green.withAlphaComponent(0.9).cgColor
-        play.layer.cornerRadius = 19
-        play.addTarget(self, action: #selector(playPressed), for: .touchUpInside)
-        play.translatesAutoresizingMaskIntoConstraints = false
-        hero.addSubview(play)
-        NSLayoutConstraint.activate([
-            play.leadingAnchor.constraint(equalTo: hero.leadingAnchor, constant: 19),
-            play.trailingAnchor.constraint(equalTo: hero.trailingAnchor, constant: -19),
-            play.bottomAnchor.constraint(equalTo: hero.bottomAnchor, constant: -14),
-            play.heightAnchor.constraint(equalToConstant: 63)
-        ])
-        stack.addArrangedSubview(hero)
-        readiness.textAlignment = .center
-        stack.addArrangedSubview(readiness)
-        stack.setCustomSpacing(8, after: readiness)
-        // Live local game-library and controller status, never mocked game progress.
-        let chips = UIStackView()
-        chips.axis = .horizontal
-        chips.distribution = .fillEqually
-        chips.spacing = 9
-        for (title, symbol, value) in [
-            ("GAME FILES", "externaldrive.fill", usbState),
-            ("CONTROLLER", "gamecontroller.fill", controllerState)
-        ] {
-            let card = GTAReference.panelView(10)
-            card.spacing = 5
-            let header = UIStackView()
-            header.axis = .horizontal
-            header.spacing = 6
-            let glyph = UIImageView(image: UIImage(systemName: symbol))
-            glyph.tintColor = GTAReference.green
-            glyph.contentMode = .scaleAspectFit
-            glyph.widthAnchor.constraint(equalToConstant: 15).isActive = true
-            header.addArrangedSubview(glyph)
-            header.addArrangedSubview(GTAReference.label(title, size: 9, weight: .bold,
-                                                       color: GTAReference.secondary))
-            card.addArrangedSubview(header)
-            value.numberOfLines = 1
-            value.lineBreakMode = .byTruncatingTail
-            card.addArrangedSubview(value)
-            chips.addArrangedSubview(card)
-        }
-        stack.addArrangedSubview(chips)
-        stack.setCustomSpacing(10, after: chips)
-        let actions = UIStackView()
-        actions.axis = .horizontal
-        actions.distribution = .fillEqually
-        actions.spacing = 11
-        let graphics = GTAReference.control("Game Settings", symbol: "gearshape.fill")
-        graphics.addTarget(self, action: #selector(openGraphics), for: .touchUpInside)
-        let files = GTAReference.control("Game Files", symbol: "folder.fill")
-        files.addTarget(self, action: #selector(openLibrary), for: .touchUpInside)
-        actions.addArrangedSubview(graphics)
-        actions.addArrangedSubview(files)
-        stack.addArrangedSubview(actions)
-        let city = UIView()
-        city.layer.cornerRadius = 17
-        city.layer.cornerCurve = .continuous
-        city.clipsToBounds = true
-        city.backgroundColor = GTAReference.panel
-        city.heightAnchor.constraint(equalToConstant: 136).isActive = true
-        let panorama = GTAReference.image("gtav-vinewood-view", height: 136, radius: 0)
-        panorama.contentMode = .scaleAspectFill
-        city.addSubview(panorama)
-        NSLayoutConstraint.activate([
-            panorama.topAnchor.constraint(equalTo: city.topAnchor),
-            panorama.bottomAnchor.constraint(equalTo: city.bottomAnchor),
-            panorama.leadingAnchor.constraint(equalTo: city.leadingAnchor),
-            panorama.trailingAnchor.constraint(equalTo: city.trailingAnchor)
-        ])
-        let titlePlate = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterialDark))
-        titlePlate.layer.cornerRadius = 10
-        titlePlate.clipsToBounds = true
-        titlePlate.translatesAutoresizingMaskIntoConstraints = false
-        city.addSubview(titlePlate)
-        let cityTitle = GTAReference.label("LOS SANTOS", size: 16, weight: .black)
-        cityTitle.textAlignment = .left
-        cityTitle.translatesAutoresizingMaskIntoConstraints = false
-        titlePlate.contentView.addSubview(cityTitle)
-        NSLayoutConstraint.activate([
-            titlePlate.leadingAnchor.constraint(equalTo: city.leadingAnchor, constant: 12),
-            titlePlate.trailingAnchor.constraint(lessThanOrEqualTo: city.trailingAnchor, constant: -12),
-            titlePlate.bottomAnchor.constraint(equalTo: city.bottomAnchor, constant: -12),
-            cityTitle.topAnchor.constraint(equalTo: titlePlate.contentView.topAnchor, constant: 10),
-            cityTitle.leadingAnchor.constraint(equalTo: titlePlate.contentView.leadingAnchor, constant: 12),
-            cityTitle.trailingAnchor.constraint(equalTo: titlePlate.contentView.trailingAnchor, constant: -12),
-            cityTitle.bottomAnchor.constraint(equalTo: titlePlate.contentView.bottomAnchor, constant: -10)
-        ])
-        stack.addArrangedSubview(city)
-        NotificationCenter.default.addObserver(self, selector: #selector(refreshLiveStatus),
-            name: USBStorageManager.changedNotification, object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(refreshLiveStatus),
-            name: .GCControllerDidConnect, object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(refreshLiveStatus),
-            name: .GCControllerDidDisconnect, object: nil)
-    }
-    override func viewWillAppear(_ animated: Bool) {
-        super.viewWillAppear(animated)
-        refreshLiveStatus()
-    }
-    @objc private func refreshLiveStatus() {
-        let hasFiles = USBStorageManager.shared.root != nil
-        let engine = NativeEngineStatus.nativeEngineLinked
-        let missing = hasFiles ? USBStorageManager.shared.missingStartupAssets() : []
-        usbState.text = !hasFiles ? "Not connected" : (missing.isEmpty ? "Startup files found" : "Files missing")
-        usbState.textColor = hasFiles && missing.isEmpty ? GTAReference.green : GTAReference.secondary
-        if let gamepad = GCController.controllers().first(where: { $0.extendedGamepad != nil }) {
-            controllerState.text = gamepad.vendorName ?? "Gamepad connected"
-            controllerState.textColor = GTAReference.green
-        } else {
-            controllerState.text = "Not connected"
-            controllerState.textColor = GTAReference.secondary
-        }
-        // Real app status; gameplay data is never invented.
-        let title = !hasFiles ? "Select GTA V Files" : (engine ? "Play GTA V" : "Check Engine")
-        play.configuration?.title = title
-        play.configuration?.image = UIImage(systemName: engine && hasFiles ? "play.fill" : "folder.fill")
-        readiness.text = !hasFiles ? "Attach your GTA V game folder to continue" :
-            (engine ? "GTA V native runtime linked" : "GTA V native gameplay not yet available")
-    }
-    @objc private func playPressed() {
-        guard USBStorageManager.shared.root != nil else { switchTab(1); return }
-        guard NativeEngineStatus.nativeEngineLinked else { openEngineReport(); return }
-        openEngineReport()
-    }
-    @objc private func openGraphics() { switchTab(2) }
-    @objc private func openLibrary() { switchTab(1) }
-}
-
 final class GTAReferenceLibraryController: GTAReferencePage, UIDocumentPickerDelegate {
     private let connection = GTAReference.label("", size: 12, weight: .semibold,
                                                 color: GTAReference.secondary)
@@ -618,16 +420,18 @@ final class GTAReferenceLibraryController: GTAReferencePage, UIDocumentPickerDel
                                               color: GTAReference.secondary)
     private let engineInfo = GTAReference.label("", size: 11, weight: .medium,
                                                 color: GTAReference.secondary)
-    private var selectedAsFile = false
     private var verifiedRoot: URL?
     private var lastInspectedBytes: Int64?
     private let assetCoverage = GTAReference.label("", size: 11, weight: .semibold,
                                                     color: GTAReference.secondary)
+    private let playButton = GTAReference.control("Select GTA V Files", symbol: "folder.fill",
+                                                  color: GTAReference.green)
+    private var pickerPresented = false
     override func viewDidLoad() {
         super.viewDidLoad()
-        stack.addArrangedSubview(GTAReference.section("Game Library"))
-        stack.addArrangedSubview(GTAReference.label("Manage Grand Theft Auto V game files", size: 13,
-                                                      color: GTAReference.secondary))
+        stack.addArrangedSubview(GTAReference.section("GTA V iOS"))
+        stack.addArrangedSubview(GTAReference.label("Your GTA V game library · game assets stay on your drive",
+                                                    size: 13, color: GTAReference.secondary))
         let card = GTAReference.panelView(15)
         let cardRow = UIStackView()
         cardRow.axis = .horizontal
@@ -651,12 +455,16 @@ final class GTAReferenceLibraryController: GTAReferencePage, UIDocumentPickerDel
         card.addArrangedSubview(diskInfo)
         card.addArrangedSubview(assetCoverage)
         stack.addArrangedSubview(card)
+        playButton.accessibilityIdentifier = "gtav-native-launch-action"
+        playButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 65).isActive = true
+        playButton.addTarget(self, action: #selector(playPressed), for: .touchUpInside)
+        stack.addArrangedSubview(playButton)
         stack.addArrangedSubview(GTAReference.section("Quick Actions"))
         let actions = UIStackView()
         actions.axis = .horizontal
         actions.spacing = 8
         actions.distribution = .fillEqually
-        let browse = GTAReference.actionTile("Browse Files", detail: "Choose game folder", symbol: "folder.fill")
+        let browse = GTAReference.actionTile("Select Folder", detail: "Open Files picker", symbol: "folder.fill")
         browse.addTarget(self, action: #selector(browsePressed), for: .touchUpInside)
         let validate = GTAReference.actionTile("Validate Files", detail: "Inspect native data", symbol: "checkmark.shield.fill", accent: GTAReference.green)
         validate.addTarget(self, action: #selector(validatePressed), for: .touchUpInside)
@@ -682,6 +490,12 @@ final class GTAReferenceLibraryController: GTAReferencePage, UIDocumentPickerDel
     override func viewWillAppear(_ animated: Bool) { super.viewWillAppear(animated); refresh() }
     @objc private func storageChanged() { refresh() }
     private func refresh() {
+        let hasFiles = USBStorageManager.shared.root != nil
+        let engine = NativeEngineStatus.nativeEngineLinked
+        var launchConfiguration = playButton.configuration
+        launchConfiguration?.title = !hasFiles ? "Select GTA V Files" : (engine ? "Play GTA V" : "Check Engine")
+        launchConfiguration?.image = UIImage(systemName: hasFiles && engine ? "play.fill" : "folder.fill")
+        playButton.configuration = launchConfiguration
         if let root = USBStorageManager.shared.root {
             let missing = USBStorageManager.shared.missingStartupAssets()
             let confirmed = verifiedRoot == root.standardizedFileURL
@@ -713,38 +527,49 @@ final class GTAReferenceLibraryController: GTAReferencePage, UIDocumentPickerDel
             engineInfo.text = "Game engine archive: not connected"
         }
     }
+    // Direct system folder selection; no action sheet or WebView intermediary.
     @objc private func browsePressed() {
-        let sheet = UIAlertController(title: "Choose GTA V Files", message: nil,
-                                      preferredStyle: .actionSheet)
-        sheet.addAction(UIAlertAction(title: "Choose Folder", style: .default) { [weak self] _ in
-            self?.pick(useFile: false)
-        })
-        sheet.addAction(UIAlertAction(title: "Select index.html fallback", style: .default) { [weak self] _ in
-            self?.pick(useFile: true)
-        })
-        sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-        sheet.popoverPresentationController?.sourceView = view
-        present(sheet, animated: true)
-    }
-    private func pick(useFile: Bool) {
-        selectedAsFile = useFile
-        let types: [UTType] = useFile ? [.html] : [.folder]
-        let picker = UIDocumentPickerViewController(forOpeningContentTypes: types, asCopy: false)
+        guard !pickerPresented, presentedViewController == nil else {
+            LogStore.shared.write("usb", "Files picker already visible")
+            return
+        }
+        pickerPresented = true
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.folder], asCopy: false)
         picker.delegate = self
         picker.allowsMultipleSelection = false
+        picker.modalPresentationStyle = .fullScreen
+        LogStore.shared.write("usb", "Opening iOS Files folder picker")
         present(picker, animated: true)
     }
+    func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+        pickerPresented = false
+        LogStore.shared.write("usb", "Files folder selection cancelled")
+    }
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-        guard let chosen = urls.first else { return }
-        USBStorageManager.shared.chooseAsync(chosen, fromFile: selectedAsFile) { [weak self] result in
+        pickerPresented = false
+        guard let selected = urls.first else { return }
+        LogStore.shared.write("usb", "Selected GTA V folder: " + selected.lastPathComponent)
+        USBStorageManager.shared.chooseAsync(selected, fromFile: false) { [weak self] result in
             guard let self else { return }
             self.refresh()
             switch result {
-            case .success: break
-            case .failure(let err):
-                GTAReference.present("Cannot read GTA V files", message: err.localizedDescription, from: self)
+            case .success:
+                LogStore.shared.write("usb", "Native engine mounted selected game folder")
+            case .failure(let error):
+                LogStore.shared.write("usb", "Game folder mount failed: " + error.localizedDescription)
+                GTAReference.present("Cannot read GTA V files", message: error.localizedDescription, from: self)
             }
         }
+    }
+    @objc private func playPressed() {
+        guard USBStorageManager.shared.root != nil else { browsePressed(); return }
+        guard NativeEngineStatus.nativeEngineLinked else {
+            GTAReference.present("Native engine unavailable",
+                                 message: "This IPA has no linked native GTA V engine.",
+                                 from: self)
+            return
+        }
+        openEngineReport()
     }
     @objc private func validatePressed() {
         guard USBStorageManager.shared.root != nil else { browsePressed(); return }
@@ -878,7 +703,7 @@ final class GTAReferenceGraphicsController: GTAReferencePage {
                     footnote: "Applied to the native controller camera-stick input")
         let mapping = GTAReference.control("Controller Mapping & Deadzone", symbol: "slider.horizontal.3")
         mapping.addAction(UIAction { [weak self] _ in
-            self?.tabBarController?.selectedIndex = 3
+            self?.tabBarController?.selectedIndex = 2
         }, for: .touchUpInside)
         controls.addArrangedSubview(mapping)
         stack.addArrangedSubview(controls)
@@ -1204,7 +1029,7 @@ final class GTAReferenceMoreController: GTAReferencePage {
 
         stack.addArrangedSubview(GTAReference.section("Local Tools"))
         let operations: [(String, String, Selector)] = [
-            ("Game Library", "externaldrive", #selector(library)),
+            ("Game Files / Home", "externaldrive", #selector(library)),
             ("Graphics", "display", #selector(graphics)),
             ("Controls", "gamecontroller.fill", #selector(controls)),
             ("Native Runtime Checks", "cpu", #selector(engine)),
@@ -1281,9 +1106,9 @@ final class GTAReferenceMoreController: GTAReferencePage {
         guard let url = URL(string: "https://github.com/NightVibes33") else { return }
         UIApplication.shared.open(url)
     }
-    @objc private func library() { switchTab(1) }
-    @objc private func graphics() { switchTab(2) }
-    @objc private func controls() { switchTab(3) }
+    @objc private func library() { switchTab(0) }
+    @objc private func graphics() { switchTab(1) }
+    @objc private func controls() { switchTab(2) }
     @objc private func engine() { openEngineReport() }
     @objc private func logs() { GTAReference.exportLogs(from: self) }
 }
