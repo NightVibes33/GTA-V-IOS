@@ -44,7 +44,7 @@ enum GTAIOSLandscape {
 }
 enum NativeRuntimeBridge {
     static var launch: (() -> Void)?
-    static func play() {
+    @MainActor static func play() {
         guard muguet_has_game_code(), muguet_game_ready(),
               USBStorageManager.shared.root != nil else {
             GTAReference.present("Cannot start GTA V",
