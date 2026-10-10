@@ -140,7 +140,8 @@ jobs:
           /usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$APP/Info.plist" | grep -Fxq GTAiOS
           /usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$APP/Info.plist" | grep -Fxq 'GTA V iOS'
           /usr/libexec/PlistBuddy -c 'Print :UIApplicationSceneManifest:UISceneConfigurations:UIWindowSceneSessionRoleApplication:0:UISceneDelegateClassName' "$APP/Info.plist" | grep -Fxq GTAIOSSceneDelegate
-          strings "$APP/muguet" | grep -Fq GTAIOSSceneDelegate
+          strings "$APP/muguet" > "$RUNNER_TEMP/gtaios-app-symbols.txt"
+          grep -Fq GTAIOSSceneDelegate "$RUNNER_TEMP/gtaios-app-symbols.txt"
           /usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$APP/Info.plist" | grep -Fxq '18.0'
           ! /usr/libexec/PlistBuddy -c 'Print :UISupportedInterfaceOrientations' "$APP/Info.plist" | grep -Fq Portrait
           /usr/libexec/PlistBuddy -c 'Print :UISupportedInterfaceOrientations' "$APP/Info.plist" | grep -Fq LandscapeRight
