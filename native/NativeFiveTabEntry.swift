@@ -31,8 +31,10 @@ enum GTAIOSLandscape {
                 interfaceOrientations: .landscapeRight)) { error in
                 LogStore.shared.write("orientation", "Landscape request error: \(error.localizedDescription)")
             }
+            scene.windows.forEach {
+                $0.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+            }
         }
-        scene.windows.forEach { $0.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations() }
         UIViewController.attemptRotationToDeviceOrientation()
         DispatchQueue.main.async {
             LogStore.shared.write("orientation", "Landscape requested; actual=\(scene.interfaceOrientation.rawValue)")
