@@ -209,8 +209,8 @@ replace("ios/project.yml",
         '- path: ../LICENSE\n      - path: ../../../ios/Sources/Resources/Assets.xcassets')
 # Explicitly permit both scene geometries, with a portrait-only launcher.
 replace("ios/Info.plist",
-        '<array><string>UIInterfaceOrientationLandscapeRight</string>',
-        '<array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationLandscapeRight</string>')
+        '<key>UISupportedInterfaceOrientations</key>\n  <array><string>UIInterfaceOrientationLandscapeRight</string>',
+        '<key>UISupportedInterfaceOrientations</key>\n  <array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationLandscapeRight</string>')
 plist = (source / "ios/Info.plist").read_text(encoding="utf-8")
 assert '<string>UIInterfaceOrientationPortrait</string>' in plist
 assert '<string>UIInterfaceOrientationLandscapeRight</string>' in plist
