@@ -36,9 +36,12 @@ private func muguet_steamios_text(_ character: UInt16)
 @MainActor final class SteamIOSGamepadInput {
     static let shared = SteamIOSGamepadInput()
     private var state = TouchGamepadState()
+    // The original SteamIOS model predates reserved player slots. Hold this
+    // bridge-only flag until gameplay attaches the real overlay touches.
+    private var reserved = false
     func reserveSessionSlot() {
         if InputSettings.shared.controllerOverlayEnabled {
-            state.reserved = true
+            reserved = true
             publish()
             LogStore.shared.write("controls", "SteamIOS player 1 reserved before engine start")
         }
@@ -49,10 +52,10 @@ private func muguet_steamios_text(_ character: UInt16)
         state.update(owner: owner, control: control, value: value)
         publish()
     }
-    func stop() { state.configure([]); publish() }
+    func stop() { reserved = false; state.configure([]); publish() }
     private func publish() {
         let p = state.sample
-        muguet_steamios_pad_update(state.connected, p.buttons, p.lt, p.rt, p.lx, p.ly, p.rx, p.ry)
+        muguet_steamios_pad_update(state.connected || reserved, p.buttons, p.lt, p.rt, p.lx, p.ly, p.rx, p.ry)
         // Logs are real cross-language acknowledgements, not a simulated
         // controller. A button/stick must reach Rust to advance packets.
         let active = p.buttons != 0 || p.lt > 0 || p.rt > 0 ||
@@ -539,7 +542,7 @@ final class TouchControlsModel: ObservableObject {
     /// included, and ml643's "is it the root view?" test therefore rejected every
     /// touch in the window. Nothing responded, and edit mode — whose branch
     /// captured everything — could never be entered to mask it.
-    func hitsInteractive(_ p: CGPoint, in bounds: CGRect) -> Bool {
+    @MainActor func hitsInteractive(_ p: CGPoint, in bounds: CGRect) -> Bool {
         guard InputSettings.shared.controllerOverlayEnabled else { return false }
         // Done/Add exist only while editing. Normal gameplay has NO overlay
         // chrome; Steam Settings is opened with the three-finger gesture.
