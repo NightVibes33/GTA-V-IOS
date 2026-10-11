@@ -187,6 +187,10 @@ replace("src/config.rs",
         extern "C" { fn dup2(old: i32, new: i32) -> i32; }
         let dir = support_dir().join("GTAiOS-Logs");
         if std::fs::create_dir_all(&dir).is_ok() {
+            let log = dir.join("engine.txt");
+            if std::fs::metadata(&log).is_ok_and(|m| m.len() > 8 * 1024 * 1024) {
+                let _ = std::fs::rename(&log, dir.join("engine-previous.txt"));
+            }
             if let Ok(file) = std::fs::OpenOptions::new()
                 .create(true).append(true).open(dir.join("engine.txt")) {
                 let fd = file.into_raw_fd();
@@ -384,28 +388,6 @@ replace("src/pad.rs", 'input::mouse_delta_f(dx * LOOK_SPEED * dt, dy * LOOK_SPEE
         'input::mouse_delta_f(dx * LOOK_SPEED * dt * input::native_stick_gain(), dy * LOOK_SPEED * dt * input::native_stick_gain());')
 print("Live camera and controller right-stick gain implemented")
 
-# Native stderr used to disappear into the system console on a sideloaded
-# iPhone. Stream real Muguet [io], [fs], [pause], [gpu] errors into Files.
-# Bounded rotation prevents perpetual engine logging from filling Documents.
-replace("src/config.rs",
-        '''    if cfg!(target_os = "ios") {
-        return;
-    }
-    let in_bundle''',
-        '''    if cfg!(target_os = "ios") {
-        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
-        let logdir = PathBuf::from(home).join("Documents/GTAiOS-Logs");
-        let _ = std::fs::create_dir_all(&logdir);
-        let path = logdir.join("engine.txt");
-        if std::fs::metadata(&path).is_ok_and(|meta| meta.len() > 8 * 1024 * 1024) {
-            let _ = std::fs::rename(&path, logdir.join("engine-previous.txt"));
-        }
-        if let Ok(f) = std::fs::OpenOptions::new().append(true).create(true).open(&path) {
-            use std::os::fd::IntoRawFd;
-            let fd = f.into_raw_fd();
-            unsafe { dup2(fd, 2); dup2(fd, 1); }
-        }
-        return;
-    }
-    let in_bundle''')
-print("Native iOS engine stdout/stderr now written to Files/GTA V iOS/GTAiOS-Logs/engine.txt")
+# Keep native logs bounded. Muguet stderr has already been redirected above.
+# The existing Logs/engine.txt includes [io] errors needed to investigate a
+# pause-menu spinner; do not register a second redirect in this adapter.
