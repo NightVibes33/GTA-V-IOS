@@ -627,7 +627,7 @@ final class ControlsWindow: UIWindow {
     }
 }
 
-final class SteamIOSInGameSettingsGesture: NSObject {
+@MainActor final class SteamIOSInGameSettingsGesture: NSObject {
     static let shared = SteamIOSInGameSettingsGesture()
     @objc func openEditor(_ gesture: UITapGestureRecognizer) {
         guard gesture.state == .ended else { return }
@@ -676,7 +676,9 @@ enum TouchControlsHost {
         if !observingOrientation {
             observingOrientation = true
             NotificationCenter.default.addObserver(forName: UIDevice.orientationDidChangeNotification,
-                object: nil, queue: .main) { _ in TouchControlsHost.attach() }
+                object: nil, queue: .main) { _ in
+                Task { @MainActor in TouchControlsHost.attach() }
+            }
         }
         if let game = scene.windows.first(where: { $0 !== window && $0.windowLevel < .normal + 101 }),
            let view = game.rootViewController?.view {
