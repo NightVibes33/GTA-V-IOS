@@ -344,3 +344,33 @@ replace("build.rs",
         '"-target", "arm64-apple-ios15.0",',
         '"-target", "arm64-apple-ios18.0",')
 print("iOS >=18 native target (Rust/Swift/Xcode/Mach-O); macOS 27 Xcode 27 runner")
+
+# The old Muguet touch overlay called input::set_focus(true) in touch::refresh
+# while gameplay was active. Removing that overlay for SteamIOS also removed
+# that essential focus recovery, leaving camera, shoot and action keys inert
+# after UIKit focus transitions even though menu navigation still reacted.
+# The SteamIOS pad now owns that existing runtime responsibility.
+replace("src/pad.rs",
+        'if cfg!(target_os = "ios") { input::set_locked(true); }',
+        '''if cfg!(target_os = "ios") {
+        input::set_locked(true);
+        if !crate::gpu::SUSPENDED.load(Ordering::Relaxed) {
+            input::set_focus(true);
+        }
+    }''')
+# UIKit transiently marks the Metal UIWindow unfocused when an auxiliary
+# transparent controller window appears. A connected touch gamepad must not
+# make the guest release all held buttons on that unrelated focus transition.
+# Real background suspension still calls input::set_focus(false).
+replace("src/app.rs",
+        '''            WindowEvent::Focused(f) => {
+                input::set_focus(f);
+                if !f { self.unlock(&window); }
+            },''',
+        '''            WindowEvent::Focused(f) => {
+                #[cfg(target_os = "ios")]
+                let f = f || crate::pad::steamios_overlay_active();
+                input::set_focus(f);
+                if !f { self.unlock(&window); }
+            },''')
+print("SteamIOS native input preserves focus and mouse lock during gameplay")

@@ -122,3 +122,7 @@ fn steamios_apply_touch(
         input::mouse_delta_f(dx * LOOK_SPEED * dt, dy * LOOK_SPEED * dt);
     }
 }
+
+pub fn steamios_overlay_active() -> bool {
+    STEAMIOS_TOUCH.lock().unwrap().enabled
+}

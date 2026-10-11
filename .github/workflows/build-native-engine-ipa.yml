@@ -69,6 +69,8 @@ jobs:
           grep -Fq 'muguet_steamios_text' native/Muguet/src/pad.rs
           grep -Fq 'steamios_text(character' native/Muguet/src/input.rs
           grep -Fq 'steamios_apply_touch(steamios' native/Muguet/src/pad.rs
+          grep -Fq 'steamios_overlay_active()' native/Muguet/src/app.rs
+          grep -Fq 'input::set_focus(true);' native/Muguet/src/pad.rs
           ! grep -Fq 'UIInterfaceOrientationPortrait' native/Muguet/ios/Info.plist
           grep -Fq 'UIInterfaceOrientationLandscapeRight' native/Muguet/ios/Info.plist
           grep -Fq 'muguet_steamios_pad_update' native/Muguet/src/pad.rs
