@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::hash::{Hash, Hasher};
-use std::io::{self, Read, Write};
+use std::io::{self, Write};
 use std::os::unix::fs::FileExt;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
@@ -170,7 +170,8 @@ impl RangeCache {
         self.evict_disk(required);
         if self.disk_used.saturating_add(required) > self.disk_limit { return; }
         let dest = self.directory.join(&name);
-        let temporary = self.directory.join(format!("{key}-{}.tmp", self.tick()));
+        let stamp = self.tick();
+        let temporary = self.directory.join(format!("{key}-{stamp}.tmp"));
         let write = (|| -> io::Result<()> {
             let mut f = File::create(&temporary)?;
             f.write_all(MAGIC)?;
