@@ -287,7 +287,16 @@ replace("src/pad.rs",
     }
     steamios_apply_touch(steamios, &mut keys, &mut buttons, in_car, dt, physical_sticks);
 
-    if cfg!(target_os = "ios") { input::set_locked(true); }''')
+    // The original Muguet iOS touch::refresh() kept FOCUS asserted for
+    // gameplay. The SteamIOS overlay replaces that native touch view and
+    // must restore the exact same native engine-input semantics. Without it
+    // buttons can navigate menus while the game ignores look/fire/actions.
+    if cfg!(target_os = "ios") {
+        input::set_locked(true);
+        if !crate::gpu::SUSPENDED.load(Ordering::Relaxed) {
+            input::set_focus(true);
+        }
+    }''')
 (source / "src/pad.rs").write_text(
     (source / "src/pad.rs").read_text(encoding="utf-8") + "\n" +
     (base / "SteamIOSPadRuntime.rs").read_text(encoding="utf-8"),

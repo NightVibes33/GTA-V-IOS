@@ -61,6 +61,10 @@ jobs:
           ! grep -Fq 'ControlLayoutMenu' native/Muguet/ios/SteamIOSControllerOverlay.swift
           ! grep -Fq 'padTint' native/Muguet/ios/SteamIOSControllerOverlay.swift
           grep -Fq 'SteamIOSGamepadInput.shared.reserveSessionSlot()' native/Muguet/ios/Launcher.swift
+          grep -Fq 'input::set_focus(true);' native/Muguet/src/pad.rs
+          grep -Fq 'if held(0x4000) { keys.insert("Space"); }' native/Muguet/src/pad.rs
+          grep -Fq 'if pad.rt > 51 { *buttons |= 1; }' native/Muguet/src/pad.rs
+          grep -Fq 'input::mouse_delta_f(dx * LOOK_SPEED * dt, dy * LOOK_SPEED * dt);' native/Muguet/src/pad.rs
           grep -Fq 'GTAIOSLandscape.enforce' native/Muguet/ios/Launcher.swift
           grep -Fq 'muguet_steamios_text' native/Muguet/src/pad.rs
           grep -Fq 'steamios_text(character' native/Muguet/src/input.rs
