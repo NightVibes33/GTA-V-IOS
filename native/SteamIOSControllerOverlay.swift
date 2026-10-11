@@ -651,7 +651,7 @@ enum TouchControlsHost {
         if hidden { SteamIOSGamepadInput.shared.stop() }
     }
 
-    static func attach() {
+    @MainActor static func attach() {
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
         guard let scene = scenes.first(where: { $0.activationState == .foregroundActive })
                         ?? scenes.first else { return }
@@ -689,8 +689,8 @@ enum TouchControlsHost {
                 tap.name = marker
                 view.addGestureRecognizer(tap)
             }
-            let marker = "gtaios-native-swipe-to-look"
-            if !(view.gestureRecognizers ?? []).contains(where: { $0.name == marker }) {
+            let swipeMarker = "gtaios-native-swipe-to-look"
+            if !(view.gestureRecognizers ?? []).contains(where: { $0.name == swipeMarker }) {
                 let swipe = UIPanGestureRecognizer(
                     target: GTAIOSSwipeLookGesture.shared,
                     action: #selector(GTAIOSSwipeLookGesture.moved(_:)))
@@ -698,7 +698,7 @@ enum TouchControlsHost {
                 swipe.maximumNumberOfTouches = 1
                 swipe.cancelsTouchesInView = false
                 swipe.delegate = GTAIOSSwipeLookGesture.shared
-                swipe.name = marker
+                swipe.name = swipeMarker
                 view.addGestureRecognizer(swipe)
                 LogStore.shared.write("controls", "Optional swipe look installed on native game view")
             }
