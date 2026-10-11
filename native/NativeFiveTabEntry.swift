@@ -162,8 +162,8 @@ final class USBStorageManager {
     static let shared = USBStorageManager()
     static let changedNotification = Notification.Name("GTAiOS.NativeLibraryDidChange")
     private static let bookmarkKey = "gtaios.native.external-folder"
-    private static let manifestPath = "data/manifest.json"
-    private static let shaderIndexPath = "b/8b0b5899ed/shaders/index.json"
+    nonisolated static let manifestPath = "data/manifest.json"
+    nonisolated static let shaderIndexPath = "b/8b0b5899ed/shaders/index.json"
     private let worker = DispatchQueue(label: "gtaios.usb-library.serial", qos: .userInitiated)
     private(set) var root: URL?
     private(set) var reconnectRequired = false
@@ -423,6 +423,7 @@ final class USBStorageManager {
         }
     }
 }
+@MainActor
 enum NativeEngineStatus {
     struct Inspection { let byteCount: Int64 }
     static var nativeEngineLinked: Bool { muguet_has_game_code() }
