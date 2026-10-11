@@ -16,6 +16,8 @@ private func muguet_steamios_mouse(_ button: Int32, _ pressed: Bool)
 private func muguet_steamios_packet_count() -> UInt64
 @_silgen_name("muguet_steamios_text")
 private func muguet_steamios_text(_ character: UInt16)
+@_silgen_name("muguet_steamios_swipe_look")
+private func muguet_steamios_swipe_look(_ dx: Double, _ dy: Double)
 
 // SteamIOS original one-layout overlay: no colored controls or preset selector.
 @MainActor final class InputSettings: ObservableObject {
@@ -580,6 +582,51 @@ final class ControlsWindow: UIWindow {
     }
 }
 
+
+// Swipe-to-look is an optional native input source alongside the original
+// SteamIOS controller, not a replacement overlay or a fake cursor.
+@MainActor enum GTAIOSSwipeLookSettings {
+    private static let enabledKey = "gtaios.native.swipeToLookEnabled"
+    private static let sensitivityKey = "gtaios.native.swipeLookSensitivity"
+    static var enabled: Bool {
+        get { UserDefaults.standard.bool(forKey: enabledKey) }
+        set {
+            UserDefaults.standard.set(newValue, forKey: enabledKey)
+            LogStore.shared.write("controls", "Swipe-to-look enabled=\(newValue)")
+        }
+    }
+    static var sensitivity: Double {
+        get {
+            let value = UserDefaults.standard.object(forKey: sensitivityKey) as? Double ?? 1.0
+            return min(max(value, 0.25), 3.0)
+        }
+        set { UserDefaults.standard.set(min(max(newValue, 0.25), 3.0), forKey: sensitivityKey) }
+    }
+}
+
+@MainActor final class GTAIOSSwipeLookGesture: NSObject, UIGestureRecognizerDelegate {
+    static let shared = GTAIOSSwipeLookGesture()
+    @objc func moved(_ recognizer: UIPanGestureRecognizer) {
+        guard GTAIOSSwipeLookSettings.enabled, !TouchControlsModel.shared.editing else { return }
+        switch recognizer.state {
+        case .began:
+            recognizer.setTranslation(.zero, in: recognizer.view)
+        case .changed:
+            let delta = recognizer.translation(in: recognizer.view)
+            recognizer.setTranslation(.zero, in: recognizer.view)
+            let scale = GTAIOSSwipeLookSettings.sensitivity
+            let dx = min(max(Double(delta.x) * scale, -140), 140)
+            let dy = min(max(Double(delta.y) * scale, -140), 140)
+            if dx != 0 || dy != 0 { muguet_steamios_swipe_look(dx, dy) }
+        default: break
+        }
+    }
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                           shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        true
+    }
+}
+
 final class SteamIOSInGameSettingsGesture: NSObject {
     static let shared = SteamIOSInGameSettingsGesture()
     @objc func openEditor(_ gesture: UITapGestureRecognizer) {
@@ -641,6 +688,19 @@ enum TouchControlsHost {
                 tap.cancelsTouchesInView = false
                 tap.name = marker
                 view.addGestureRecognizer(tap)
+            }
+            let marker = "gtaios-native-swipe-to-look"
+            if !(view.gestureRecognizers ?? []).contains(where: { $0.name == marker }) {
+                let swipe = UIPanGestureRecognizer(
+                    target: GTAIOSSwipeLookGesture.shared,
+                    action: #selector(GTAIOSSwipeLookGesture.moved(_:)))
+                swipe.minimumNumberOfTouches = 1
+                swipe.maximumNumberOfTouches = 1
+                swipe.cancelsTouchesInView = false
+                swipe.delegate = GTAIOSSwipeLookGesture.shared
+                swipe.name = marker
+                view.addGestureRecognizer(swipe)
+                LogStore.shared.write("controls", "Optional swipe look installed on native game view")
             }
         }
         LogStore.shared.write("controls",

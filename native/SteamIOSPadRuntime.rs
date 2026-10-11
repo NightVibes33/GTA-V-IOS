@@ -55,6 +55,20 @@ pub extern "C" fn muguet_steamios_mouse(button: i32, pressed: bool) {
 pub extern "C" fn muguet_steamios_text(character: u16) {
     input::steamios_text(character);
 }
+// Swipe movement enters the identical guest mouse delta block as right stick.
+static STEAMIOS_SWIPE_PACKETS: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
+#[no_mangle]
+pub extern "C" fn muguet_steamios_swipe_look(dx: f64, dy: f64) {
+    if !dx.is_finite() || !dy.is_finite() { return; }
+    if dx == 0.0 && dy == 0.0 { return; }
+    STEAMIOS_SWIPE_PACKETS.fetch_add(1, Ordering::Relaxed);
+    input::mouse_delta_f(dx.clamp(-140.0, 140.0), dy.clamp(-140.0, 140.0));
+}
+#[no_mangle]
+pub extern "C" fn muguet_steamios_swipe_count() -> u64 {
+    STEAMIOS_SWIPE_PACKETS.load(Ordering::Relaxed)
+}
 
 fn steamios_apply_touch(
     pad: SteamIOSPad, keys: &mut HashSet<&'static str>,

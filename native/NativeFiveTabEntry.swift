@@ -344,7 +344,7 @@ final class GTANativeControlsViewController: GTAReferencePage {
         panel.addArrangedSubview(row)
         stack.addArrangedSubview(panel)
         let overlay = UISwitch()
-        overlay.isOn = TouchControlsModel.shared.visible
+        overlay.isOn = InputSettings.shared.controllerOverlayEnabled
         let overlayRow = UIStackView()
         overlayRow.axis = .horizontal
         overlayRow.alignment = .center
@@ -352,10 +352,35 @@ final class GTANativeControlsViewController: GTAReferencePage {
         overlayRow.addArrangedSubview(UIView())
         overlayRow.addArrangedSubview(overlay)
         overlay.addAction(UIAction { _ in
-            TouchControlsModel.shared.visible = overlay.isOn
+            InputSettings.shared.controllerOverlayEnabled = overlay.isOn
             LogStore.shared.write("controls", "SteamIOS touch overlay enabled=\(overlay.isOn)")
         }, for: .valueChanged)
         panel.addArrangedSubview(overlayRow)
+        let swipe = UISwitch()
+        swipe.isOn = GTAIOSSwipeLookSettings.enabled
+        let swipeRow = UIStackView()
+        swipeRow.axis = .horizontal
+        swipeRow.alignment = .center
+        swipeRow.addArrangedSubview(GTAReference.label("Swipe to look (optional)", size: 14))
+        swipeRow.addArrangedSubview(UIView())
+        swipeRow.addArrangedSubview(swipe)
+        swipe.addAction(UIAction { _ in
+            GTAIOSSwipeLookSettings.enabled = swipe.isOn
+        }, for: .valueChanged)
+        panel.addArrangedSubview(swipeRow)
+        panel.addArrangedSubview(GTAReference.label(
+            "Drag on empty gameplay space to look around. Original SteamIOS sticks and buttons remain active.",
+            size: 12, color: GTAReference.secondary))
+        panel.addArrangedSubview(GTAReference.label("Swipe look sensitivity", size: 13,
+                                                   weight: .semibold))
+        let swipeSensitivity = UISlider()
+        swipeSensitivity.minimumValue = 0.25
+        swipeSensitivity.maximumValue = 3.0
+        swipeSensitivity.value = Float(GTAIOSSwipeLookSettings.sensitivity)
+        swipeSensitivity.addAction(UIAction { _ in
+            GTAIOSSwipeLookSettings.sensitivity = Double(swipeSensitivity.value)
+        }, for: .valueChanged)
+        panel.addArrangedSubview(swipeSensitivity)
         let edit = GTAReference.control("Edit SteamIOS Controller Layout", symbol: "slider.horizontal.3")
         edit.addAction(UIAction { [weak self] _ in
             guard let self else { return }

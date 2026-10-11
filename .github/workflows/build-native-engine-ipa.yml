@@ -74,6 +74,9 @@ jobs:
           ! grep -Fq 'UIInterfaceOrientationPortrait' native/Muguet/ios/Info.plist
           grep -Fq 'UIInterfaceOrientationLandscapeRight' native/Muguet/ios/Info.plist
           grep -Fq 'muguet_steamios_pad_update' native/Muguet/src/pad.rs
+          grep -Fq 'muguet_steamios_swipe_look' native/Muguet/src/pad.rs
+          grep -Fq 'GTAIOSSwipeLookGesture' native/Muguet/ios/SteamIOSControllerOverlay.swift
+          grep -Fq 'Swipe to look (optional)' native/Muguet/ios/Launcher.swift
           ! grep -Fq 'crate::touch::install(&window)' native/Muguet/src/app.rs
           test "$(sw_vers -productVersion | cut -d. -f1)" = 27
           xcodebuild -version
