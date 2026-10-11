@@ -388,3 +388,51 @@ print("Live camera and controller right-stick gain implemented")
 # Keep native logs bounded. Muguet stderr has already been redirected above.
 # The existing Logs/engine.txt includes [io] errors needed to investigate a
 # pause-menu spinner; do not register a second redirect in this adapter.
+
+# File Provider / USB availability can change while an iOS security-scoped
+# bookmark is mounted. Upstream Muguet unconditionally returns -1 on the first
+# read_exact_at EIO; GTA V treats that short read as a fatal RAGE HDD error.
+# Preserve all bytes and the same native I/O pathway, reopening stale handles
+# with bounded backoff ONLY for transient provider errors. Never zero-fill,
+# silently succeed, or rewrite external assets.
+replace("src/io.rs",
+        '''                            match f.read_exact_at(buf, off) {
+                                Ok(()) => len as i64,
+                                Err(e) => { eprintln!("[io] read {path}@{off}+{len}: {e}"); -1 }
+                            }''',
+        '''                            // File Provider / USB reads can fail transiently with EIO.
+                            // Never return success unless every requested byte is read.
+                            // Drop the stale descriptor and reopen through the active
+                            // security-scoped mount before bounded retry attempts.
+                            let mut read = f.read_exact_at(buf, off);
+                            let transient = read.as_ref().err().is_some_and(|e| {
+                                e.raw_os_error() == Some(5)
+                                    || matches!(e.kind(), std::io::ErrorKind::Interrupted
+                                        | std::io::ErrorKind::WouldBlock
+                                        | std::io::ErrorKind::TimedOut)
+                            });
+                            if transient {
+                                handles.remove(&id);
+                                for (retry, delay_ms) in [30_u64, 60, 120, 240, 480, 960]
+                                    .into_iter().enumerate()
+                                {
+                                    std::thread::sleep(Duration::from_millis(delay_ms));
+                                    match File::open(root.join(path)) {
+                                        Ok(reopened) => {
+                                            read = reopened.read_exact_at(buf, off);
+                                            if read.is_ok() {
+                                                handles.insert(id, reopened);
+                                                eprintln!("[io] transient File Provider read recovered: {path}@{off}+{len} attempt={}", retry + 1);
+                                                break;
+                                            }
+                                        }
+                                        Err(e) => read = Err(e),
+                                    }
+                                }
+                            }
+                            if read.is_err() { handles.remove(&id); }
+                            match read {
+                                Ok(()) => len as i64,
+                                Err(e) => { eprintln!("[io] persistent read failure {path}@{off}+{len}: {e}"); -1 }
+                            }''')
+print("Native USB read retries enabled for transient File Provider EIO")
