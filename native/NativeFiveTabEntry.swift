@@ -14,6 +14,7 @@ final class GTAIOSSceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 
     func sceneDidBecomeActive(_ scene: UIScene) {
+        if !GTAIOSOrientation.playing { USBStorageManager.shared.restoreIfNeeded() }
         if !GTAIOSOrientation.playing, let windowScene = scene as? UIWindowScene {
             windowScene.requestGeometryUpdate(
                 UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .portrait)
@@ -156,87 +157,272 @@ public func muguetShowLauncher(_ viewController: UnsafeMutableRawPointer,
     parent.present(launcher, animated: false)
 }
 
+@MainActor
 final class USBStorageManager {
     static let shared = USBStorageManager()
     static let changedNotification = Notification.Name("GTAiOS.NativeLibraryDidChange")
     private static let bookmarkKey = "gtaios.native.external-folder"
+    private static let manifestPath = "data/manifest.json"
+    private static let shaderIndexPath = "b/8b0b5899ed/shaders/index.json"
+    private let worker = DispatchQueue(label: "gtaios.usb-library.serial", qos: .userInitiated)
     private(set) var root: URL?
+    private(set) var reconnectRequired = false
+    private(set) var recoveryMessage: String?
     private var securedURL: URL?
+    private var generation: UInt64 = 0
+    private var restoreInFlight = false
     var startupPathCount: Int { 2 }
 
     private init() {
-        guard let data = UserDefaults.standard.data(forKey: Self.bookmarkKey) else { return }
-        do {
-            var stale = false
-            let url = try URL(resolvingBookmarkData: data, options: [],
-                              relativeTo: nil, bookmarkDataIsStale: &stale)
-            chooseAsync(url, fromFile: false) { result in
-                if case .failure(let error) = result {
-                    LogStore.shared.write("usb", "Bookmark restoration failed: \(error.localizedDescription)")
+        // Start only one asynchronous restoration attempt per launch. A vanished
+        // File Provider cannot be recreated from a remembered filesystem path.
+        restoreIfNeeded()
+    }
+
+    func restoreIfNeeded() {
+        guard root == nil, !restoreInFlight, !reconnectRequired,
+              let bookmark = UserDefaults.standard.data(forKey: Self.bookmarkKey) else { return }
+        restoreInFlight = true
+        let expected = generation
+        worker.async {
+            do {
+                var stale = false
+                let url = try URL(resolvingBookmarkData: bookmark, options: [],
+                                  relativeTo: nil, bookmarkDataIsStale: &stale)
+                DispatchQueue.main.async {
+                    self.restoreInFlight = false
+                    guard self.generation == expected, self.root == nil else { return }
+                    LogStore.shared.write("usb",
+                        stale ? "Saved USB bookmark is stale; validating and renewing access"
+                              : "Saved USB bookmark resolved; validating live provider access")
+                    self.chooseAsync(url, fromFile: false, restoring: true) { result in
+                        if case .failure(let error) = result {
+                            LogStore.shared.write("usb",
+                                "Saved library unavailable; reconnect via Files picker: " +
+                                error.localizedDescription)
+                        }
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.restoreInFlight = false
+                    guard self.generation == expected, self.root == nil else { return }
+                    self.setRecovery(error, context: "bookmark restoration")
                 }
             }
-        } catch {
-            LogStore.shared.write("usb", "Cannot resolve external library bookmark: \(error)")
         }
     }
 
-    func missingStartupAssets() -> [String] {
-        guard let root else { return ["data/manifest.json", "b/8b0b5899ed/shaders/index.json"] }
-        return ["data/manifest.json", "b/8b0b5899ed/shaders/index.json"].filter {
-            !FileManager.default.fileExists(atPath: root.appendingPathComponent($0).path)
-        }
+    private func notifyChanged() {
+        NotificationCenter.default.post(name: Self.changedNotification, object: nil)
     }
 
-    func chooseAsync(_ url: URL, fromFile: Bool,
-                     completion: @escaping (Result<Void, Error>) -> Void) {
-        let choice = fromFile ? url.deletingLastPathComponent() : url
-        DispatchQueue.global(qos: .userInitiated).async {
-            let scoped = choice.startAccessingSecurityScopedResource()
-            let root = ["", "playgta5.com", "mirror/playgta5.com",
-                        "mirror/mirror/playgta5.com"].map {
-                choice.appendingPathComponent($0, isDirectory: true)
-            }.first {
-                FileManager.default.fileExists(
-                    atPath: $0.appendingPathComponent("data/manifest.json").path)
+    private func setRecovery(_ error: Error, context: String) {
+        // Keep the bookmark for a later manual regrant. Clearing it on -2001
+        // would turn a temporarily missing USB provider into permanent data loss
+        // of the saved access token.
+        guard root == nil else { return }
+        reconnectRequired = true
+        recoveryMessage = "Reconnect the USB-C drive, then tap Reconnect Drive and select the GTA V folder in Files. The game assets will not be copied."
+        let ns = error as NSError
+        let provider = Self.isProviderFailure(ns)
+        LogStore.shared.write("usb",
+            "\(context) failed (\(ns.domain) \(ns.code))" +
+            (provider ? " — File Provider unavailable; new user-selected URL required"
+                      : " — library could not be opened"))
+        notifyChanged()
+    }
+
+    private nonisolated static func isProviderFailure(_ error: NSError) -> Bool {
+        if error.domain == "NSFileProviderErrorDomain" &&
+            [-2001, -2012, -2013].contains(error.code) { return true }
+        if error.domain == NSPOSIXErrorDomain &&
+            [5, 6, 9].contains(error.code) { return true }
+        if let underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError {
+            return isProviderFailure(underlying)
+        }
+        return false
+    }
+
+    private nonisolated static func libraryError(_ message: String) -> NSError {
+        NSError(domain: "GTAiOS.NativeLibrary", code: 1,
+                userInfo: [NSLocalizedDescriptionKey: message])
+    }
+
+    // iOS gives the document picker a security-scoped folder URL. For a
+    // provider-backed file Apple requires NSFileCoordinator to serialize reads
+    // with provider changes. Only the two small startup JSON files are read.
+    private nonisolated static func coordinatedData(_ url: URL) throws -> Data {
+        let coordinator = NSFileCoordinator(filePresenter: nil)
+        var coordinationError: NSError?
+        var readResult: Result<Data, Error>?
+        coordinator.coordinate(readingItemAt: url, options: [], error: &coordinationError) { readable in
+            readResult = Result { try Data(contentsOf: readable) }
+        }
+        if let coordinationError { throw coordinationError }
+        guard let readResult else {
+            throw libraryError("The Files provider did not return a readable game file.")
+        }
+        return try readResult.get()
+    }
+
+    private nonisolated static func validateFolder(_ selected: URL) throws -> URL {
+        let fm = FileManager.default
+        for suffix in ["", "playgta5.com", "mirror/playgta5.com",
+                       "mirror/mirror/playgta5.com"] {
+            let root = selected.appendingPathComponent(suffix, isDirectory: true)
+            let manifestURL = root.appendingPathComponent(manifestPath)
+            let shaderURL = root.appendingPathComponent(shaderIndexPath)
+            guard fm.fileExists(atPath: manifestURL.path) &&
+                  fm.fileExists(atPath: shaderURL.path) else { continue }
+            let manifestData = try coordinatedData(manifestURL)
+            let json = try JSONSerialization.jsonObject(with: manifestData)
+            guard let dictionary = json as? [String: Any],
+                  dictionary["files"] is [Any] else {
+                throw libraryError("The selected game manifest has no files array.")
             }
-            let ok = choice.path.withCString { muguet_mount_external($0) }
-            let message = muguet_import_error().map { String(cString: $0) }
-            let ready = ok && muguet_game_ready() && root != nil
-            let bookmark = ready ? (try? choice.bookmarkData(
-                options: [], includingResourceValuesForKeys: nil, relativeTo: nil)) : nil
-            if !ready && scoped { choice.stopAccessingSecurityScopedResource() }
-            DispatchQueue.main.async {
-                guard ready, let root else {
-                    let error = NSError(domain: "GTAiOS.NativeLibrary", code: 1,
-                        userInfo: [NSLocalizedDescriptionKey:
-                            message ?? "Select a readable folder containing data/manifest.json and b/8b0b5899ed/shaders/index.json."])
+            let shaderData = try coordinatedData(shaderURL)
+            _ = try JSONSerialization.jsonObject(with: shaderData)
+            return root
+        }
+        throw libraryError("The GTA V folder is not currently readable. Check the USB-C connection and select the folder containing data/manifest.json and b/8b0b5899ed/shaders/index.json.")
+    }
+
+    private nonisolated static func isInAppContainer(_ url: URL) -> Bool {
+        let path = url.standardizedFileURL.path
+        let home = NSHomeDirectory()
+        return path == home || path.hasPrefix(home + "/")
+    }
+
+    // Game startup requires verified provider access, not simply an old URL or
+    // fileExists result. The native I/O threads retain the selected scope.
+    func chooseAsync(_ url: URL, fromFile: Bool, restoring: Bool = false,
+                     completion: @escaping (Result<Void, Error>) -> Void) {
+        guard !GTAIOSOrientation.playing else {
+            completion(.failure(Self.libraryError(
+                "Exit the game before changing its external game folder.")))
+            return
+        }
+        let selected = fromFile ? url.deletingLastPathComponent() : url
+        generation &+= 1
+        let ticket = generation
+        reconnectRequired = false
+        recoveryMessage = nil
+        worker.async {
+            let acquiredScope = selected.startAccessingSecurityScopedResource()
+            do {
+                guard acquiredScope || Self.isInAppContainer(selected) else {
+                    throw Self.libraryError("iOS did not grant access to this external folder. Select it again in the Files picker.")
+                }
+                let checkedRoot = try Self.validateFolder(selected)
+                let ok = selected.path.withCString { muguet_mount_external($0) }
+                guard ok && muguet_game_ready() else {
+                    let detail = muguet_import_error().map { String(cString: $0) }
+                        ?? "The native engine cannot mount these game files."
+                    throw Self.libraryError(detail)
+                }
+                // On iOS, a bookmark generated from a security-scoped picker
+                // URL retains its access grant. The macOS-only .withSecurityScope
+                // option is deliberately not used here.
+                let newBookmark = try? selected.bookmarkData(
+                    options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
+                DispatchQueue.main.async {
+                    guard self.generation == ticket else {
+                        if acquiredScope { selected.stopAccessingSecurityScopedResource() }
+                        return
+                    }
+                    let oldGrant = self.securedURL
+                    self.securedURL = acquiredScope ? selected : nil
+                    self.root = checkedRoot
+                    self.reconnectRequired = false
+                    self.recoveryMessage = nil
+                    if let newBookmark {
+                        UserDefaults.standard.set(newBookmark, forKey: Self.bookmarkKey)
+                    }
+                    oldGrant?.stopAccessingSecurityScopedResource()
+                    LogStore.shared.write("usb",
+                        restoring ? "Restored verified USB library with active scope"
+                                  : "Mounted native game library: \(checkedRoot.lastPathComponent)")
+                    self.notifyChanged()
+                    completion(.success(()))
+                }
+            } catch {
+                if acquiredScope { selected.stopAccessingSecurityScopedResource() }
+                DispatchQueue.main.async {
+                    guard self.generation == ticket else { return }
+                    if self.root == nil { self.setRecovery(error, context: restoring ? "restore" : "mount") }
                     completion(.failure(error))
+                }
+            }
+        }
+    }
+
+    // Check the live provider again immediately before starting game threads.
+    // A persisted bookmark or a previously mounted path is NOT proof that a
+    // removable disk is still present.
+    func verifyReadyForPlay(_ completion: @escaping (Result<Void, Error>) -> Void) {
+        guard let candidate = root else {
+            completion(.failure(Self.libraryError("Reconnect the GTA V drive in Files.")))
+            return
+        }
+        let ticket = generation
+        worker.async {
+            let result = Result<Void, Error> {
+                _ = try Self.coordinatedData(candidate.appendingPathComponent(Self.manifestPath))
+                _ = try Self.coordinatedData(candidate.appendingPathComponent(Self.shaderIndexPath))
+            }
+            DispatchQueue.main.async {
+                guard self.generation == ticket else {
+                    completion(.failure(Self.libraryError("The game folder changed during validation.")))
                     return
                 }
-                // The sandbox grant must outlive the engine's asynchronous I/O threads.
-                if let previous = self.securedURL { previous.stopAccessingSecurityScopedResource() }
-                self.securedURL = scoped ? choice : nil
-                self.root = root
-                if let bookmark { UserDefaults.standard.set(bookmark, forKey: Self.bookmarkKey) }
-                LogStore.shared.write("usb", "Mounted native game library: \(root.lastPathComponent)")
-                NotificationCenter.default.post(name: Self.changedNotification, object: nil)
-                completion(.success(()))
+                if case .failure(let error) = result {
+                    self.invalidateMountedLibrary(error)
+                }
+                completion(result)
             }
         }
+    }
+
+    private func invalidateMountedLibrary(_ error: Error) {
+        generation &+= 1
+        let oldGrant = securedURL
+        root = nil
+        securedURL = nil
+        // Native unmount must follow any outstanding worker mount/validation,
+        // then release the security scope (never while Rust may be mounting).
+        worker.async {
+            muguet_unmount_external()
+            DispatchQueue.main.async { oldGrant?.stopAccessingSecurityScopedResource() }
+        }
+        setRecovery(error, context: "pre-Play provider validation")
+    }
+
+    // These paths were already validated on the serial worker. Do not hit a
+    // 20GB external File Provider synchronously from every launcher redraw.
+    func missingStartupAssets() -> [String] {
+        root == nil ? [Self.manifestPath, Self.shaderIndexPath] : []
     }
 
     func disconnect(completion: @escaping () -> Void) {
-        securedURL?.stopAccessingSecurityScopedResource()
-        securedURL = nil
+        generation &+= 1
+        let oldGrant = securedURL
         root = nil
-        muguet_unmount_external()
+        securedURL = nil
+        reconnectRequired = false
+        recoveryMessage = nil
         UserDefaults.standard.removeObject(forKey: Self.bookmarkKey)
-        NotificationCenter.default.post(name: Self.changedNotification, object: nil)
-        LogStore.shared.write("usb", "External game library unmounted")
-        completion()
+        notifyChanged()
+        worker.async {
+            muguet_unmount_external()
+            DispatchQueue.main.async {
+                oldGrant?.stopAccessingSecurityScopedResource()
+                LogStore.shared.write("usb", "External game library unmounted")
+                completion()
+            }
+        }
     }
 }
-
 enum NativeEngineStatus {
     struct Inspection { let byteCount: Int64 }
     static var nativeEngineLinked: Bool { muguet_has_game_code() }

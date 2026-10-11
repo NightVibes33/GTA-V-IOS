@@ -466,7 +466,9 @@ final class GTAReferenceLibraryController: GTAReferencePage, UIDocumentPickerDel
         let hasFiles = USBStorageManager.shared.root != nil
         let engine = NativeEngineStatus.nativeEngineLinked
         var launchConfiguration = playButton.configuration
-        launchConfiguration?.title = !hasFiles ? "Select GTA V Files" : (engine ? "Play GTA V" : "Check Engine")
+        launchConfiguration?.title = !hasFiles
+            ? (USBStorageManager.shared.reconnectRequired ? "Reconnect GTA V Drive" : "Select GTA V Files")
+            : (engine ? "Play GTA V" : "Check Engine")
         launchConfiguration?.image = UIImage(systemName: hasFiles && engine ? "play.fill" : "folder.fill")
         playButton.configuration = launchConfiguration
         if let root = USBStorageManager.shared.root {
@@ -492,9 +494,12 @@ final class GTAReferenceLibraryController: GTAReferencePage, UIDocumentPickerDel
         } else {
             verifiedRoot = nil
             lastInspectedBytes = nil
-            connection.text = "Not selected"
-            connection.textColor = GTAReference.blue
-            diskInfo.text = "Select your own local game mirror from the Files app"
+            connection.text = USBStorageManager.shared.reconnectRequired
+                ? "USB File Provider disconnected" : "Not selected"
+            connection.textColor = USBStorageManager.shared.reconnectRequired
+                ? UIColor.systemOrange : GTAReference.blue
+            diskInfo.text = USBStorageManager.shared.recoveryMessage
+                ?? "Select your own local game mirror from the Files app"
             assetCoverage.text = "No startup paths inspected"
             assetCoverage.textColor = GTAReference.secondary
             engineInfo.text = "Game engine archive: not connected"
@@ -542,7 +547,31 @@ final class GTAReferenceLibraryController: GTAReferencePage, UIDocumentPickerDel
                                  from: self)
             return
         }
-        openEngineReport()
+        // Check the provider on its serial worker; don't start a native engine
+        // with a stale Files bookmark or a removed external drive.
+        playButton.isEnabled = false
+        USBStorageManager.shared.verifyReadyForPlay { [weak self] result in
+            guard let self else { return }
+            self.playButton.isEnabled = true
+            self.refresh()
+            switch result {
+            case .success:
+                self.openEngineReport()
+            case .failure(let error):
+                self.presentReconnect(error)
+            }
+        }
+    }
+    private func presentReconnect(_ error: Error) {
+        let alert = UIAlertController(title: "Reconnect GTA V Drive",
+            message: error.localizedDescription +
+                "\nReconnect the USB-C drive and select the GTA V folder in Files. Your game files stay on the drive.",
+            preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        alert.addAction(UIAlertAction(title: "Reconnect Drive", style: .default) { [weak self] _ in
+            self?.browsePressed()
+        })
+        present(alert, animated: true)
     }
     @objc private func validatePressed() {
         guard USBStorageManager.shared.root != nil else { browsePressed(); return }

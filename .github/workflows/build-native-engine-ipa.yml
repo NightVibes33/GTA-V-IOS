@@ -68,6 +68,11 @@ jobs:
           grep -Fq 'muguet_steamios_set_mouse_sensitivity' native/Muguet/src/input.rs
           grep -Fq 'muguet_steamios_set_stick_gain' native/Muguet/src/input.rs
           grep -Fq 'GTAIOSLandscape.enforce' native/Muguet/ios/Launcher.swift
+          grep -Fq 'NSFileCoordinator(filePresenter: nil)' native/Muguet/ios/Launcher.swift
+          grep -Fq 'NSFileProviderErrorDomain' native/Muguet/ios/Launcher.swift
+          grep -Fq 'verifyReadyForPlay' native/Muguet/ios/GTAFiveTabLauncher.swift
+          grep -Fq 'Reconnect GTA V Drive' native/Muguet/ios/GTAFiveTabLauncher.swift
+          grep -Fq 'startAccessingSecurityScopedResource()' native/Muguet/ios/Launcher.swift
           grep -Fq 'supportedInterfaceOrientations: UIInterfaceOrientationMask { .portrait }' native/Muguet/ios/GTAFiveTabLauncher.swift
           grep -Fq 'ValidOrientations::Portrait' native/Muguet/src/app.rs
           grep -Fq 'ValidOrientations::Landscape' native/Muguet/src/app.rs
