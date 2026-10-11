@@ -371,7 +371,7 @@ final class GTANativeControlsViewController: GTAReferencePage {
         }, for: .touchUpInside)
         panel.addArrangedSubview(reset)
         stack.addArrangedSubview(GTAReference.label(
-            "Your original SteamIOS controller overlay: edit immediately in landscape, reposition and resize every control, add/remove buttons and sticks, and remap keyboard/gamepad actions. Physical controllers remain supported.",
+            "Original SteamIOS layout: uncolored glass controls, dual analog sticks, movable and resizable buttons, and keyboard/gamepad mapping. No Xbox presets or colored buttons.",
             size: 12, color: GTAReference.secondary))
     }
     private func addSlider(_ title: String, key: String, fallback: Double,

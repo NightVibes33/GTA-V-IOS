@@ -56,9 +56,10 @@ jobs:
           grep -Fq '@objc(GTAIOSSceneDelegate)' native/Muguet/ios/Launcher.swift
           grep -Fq 'gtaios_active_window_scene' native/Muguet/ios/Launcher.swift
           grep -Fq 'TouchControlsOverlay' native/Muguet/ios/SteamIOSControllerOverlay.swift
-          grep -Fq 'ControlPresetsModel' native/Muguet/ios/SteamIOSControllerOverlay.swift
-          grep -Fq 'GlassEffectContainer(spacing: 12)' native/Muguet/ios/SteamIOSControllerOverlay.swift
-          grep -Fq 'struct PadBindings: Equatable' native/Muguet/ios/SteamIOSControllerOverlay.swift
+          grep -Fq 'private static func defaultLayout()' native/Muguet/ios/SteamIOSControllerOverlay.swift
+          grep -Fq 'struct TouchControlButton: View' native/Muguet/ios/SteamIOSControllerOverlay.swift
+          ! grep -Fq 'ControlLayoutMenu' native/Muguet/ios/SteamIOSControllerOverlay.swift
+          ! grep -Fq 'padTint' native/Muguet/ios/SteamIOSControllerOverlay.swift
           grep -Fq 'SteamIOSGamepadInput.shared.reserveSessionSlot()' native/Muguet/ios/Launcher.swift
           grep -Fq 'GTAIOSLandscape.enforce' native/Muguet/ios/Launcher.swift
           grep -Fq 'muguet_steamios_text' native/Muguet/src/pad.rs

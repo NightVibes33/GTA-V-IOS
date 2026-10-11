@@ -90,8 +90,10 @@ fn steamios_apply_touch(
         if ly < -STICK_DEADZONE { keys.insert("KeyS"); }
         if pad.rt > 51 { *buttons |= 1; }
         if pad.lt > 51 { *buttons |= 2; }
-        if held(0x1000) { keys.insert("ShiftLeft"); }
-        if held(0x4000) { keys.insert("Space"); }
+        // A must jump, X must reload; menus still accept A as Enter.
+        if held(0x1000) && input::start_mode() != 0 { keys.insert("Space"); }
+        if held(0x4000) { keys.insert("KeyR"); }
+        if held(0x0040) { keys.insert("ShiftLeft"); }
         if held(0x0200) { keys.insert("KeyQ"); }
         if held(0x0040) { keys.insert("ControlLeft"); }
     }
