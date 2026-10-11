@@ -89,9 +89,9 @@ launcher = (project / "ios/Sources/UI/GTAFiveTabLauncher.swift").read_text(encod
 launcher = launcher.replace("GameNavigationController(rootViewController: entry.0)",
                             "UINavigationController(rootViewController: entry.0)")
 launcher = launcher.replace("ControllerSettingsViewController()", "GTANativeControlsViewController()")
-# Both the launcher and native Metal gameplay must remain landscape-only.
-assert 'supportedInterfaceOrientations: UIInterfaceOrientationMask { .landscape }' in launcher
-assert 'preferredInterfaceOrientationForPresentation: UIInterfaceOrientation { .landscapeRight }' in launcher
+# Keep the UIKit launcher portrait-only. The native Metal view changes to landscape on Play.
+assert 'supportedInterfaceOrientations: UIInterfaceOrientationMask { .portrait }' in launcher
+assert 'preferredInterfaceOrientationForPresentation: UIInterfaceOrientation { .portrait }' in launcher
 old_navigation = """        navigationController?.setNavigationBarHidden(false, animated: true)
         let gameplay = GameViewController()
         gameplay.hidesBottomBarWhenPushed = true
@@ -211,7 +211,8 @@ replace("ios/Info.plist",
 replace("ios/project.yml",
         '- path: ../../../ios/Sources/Resources/Assets.xcassets',
         '- path: ../LICENSE\n      - path: ../../../ios/Sources/Resources/Assets.xcassets')
-# Preserve the pinned engine's landscape-only Info.plist; do not inject portrait.
+# The pinned plist starts landscape-only; patch_winit_scene.py will add portrait
+# to the app's capabilities so UIKit can lock the launcher to portrait.
 plist = (source / "ios/Info.plist").read_text(encoding="utf-8")
 assert '<string>UIInterfaceOrientationPortrait</string>' not in plist
 assert '<string>UIInterfaceOrientationLandscapeRight</string>' in plist
@@ -342,6 +343,36 @@ replace("build.rs",
         '"-target", "arm64-apple-ios18.0",')
 print("iOS >=18 native target (Rust/Swift/Xcode/Mach-O); macOS 27 Xcode 27 runner")
 
+# Start the Metal root window portrait-only; at Play, switch winit to
+# landscape-only and let the real iOS geometry change complete before starting
+# the native RAGE engine (avoids a 664x1440 game surface).
+replace("src/app.rs",
+        'use winit::platform::ios::{ScreenEdge, WindowAttributesExtIOS};',
+        'use winit::platform::ios::{ScreenEdge, ValidOrientations, WindowAttributesExtIOS};')
+replace("src/app.rs",
+        'attrs.with_prefers_status_bar_hidden(true).with_prefers_home_indicator_hidden(true)',
+        'attrs.with_valid_orientations(ValidOrientations::Portrait).with_prefers_status_bar_hidden(true).with_prefers_home_indicator_hidden(true)')
+replace("src/app.rs",
+        '        static PLAY: AtomicBool = AtomicBool::new(false);',
+        '        static PLAY: AtomicBool = AtomicBool::new(false);\n        static GAME_ORIENTATION_SET: AtomicBool = AtomicBool::new(false);')
+replace("src/app.rs",
+        '''        if PLAY.load(Ordering::SeqCst) {
+            let settings = crate::config::reload();''',
+        '''        if PLAY.load(Ordering::SeqCst) {
+            use winit::platform::ios::{ValidOrientations, WindowExtIOS};
+            if !GAME_ORIENTATION_SET.swap(true, Ordering::SeqCst) {
+                window.set_valid_orientations(ValidOrientations::Landscape);
+                eprintln!("[orientation] Native Metal controller unlocked for landscape-only gameplay");
+            }
+            let (width, height) = backbuffer_size(&window);
+            if width <= height {
+                // The iOS scene is still portrait: do not start the engine
+                // with portrait backbuffers or pass portrait -width/-height.
+                return;
+            }
+            let settings = crate::config::reload();''')
+print("Portrait launcher and landscape-only game surface lifecycle integrated")
+
 # UIKit transiently marks the Metal UIWindow unfocused when an auxiliary
 # transparent controller window appears. A connected touch gamepad must not
 # make the guest release all held buttons on that unrelated focus transition.
@@ -406,7 +437,7 @@ replace("src/io.rs",
                             // security-scoped mount before bounded retry attempts.
                             let mut read = f.read_exact_at(buf, off);
                             let transient = read.as_ref().err().is_some_and(|e| {
-                                e.raw_os_error() == Some(5)
+                                matches!(e.raw_os_error(), Some(5 | 6 | 9))
                                     || matches!(e.kind(), std::io::ErrorKind::Interrupted
                                         | std::io::ErrorKind::WouldBlock
                                         | std::io::ErrorKind::TimedOut)
@@ -435,4 +466,44 @@ replace("src/io.rs",
                                 Ok(()) => len as i64,
                                 Err(e) => { eprintln!("[io] persistent read failure {path}@{off}+{len}: {e}"); -1 }
                             }''')
-print("Native USB read retries enabled for transient File Provider EIO")
+# Retry initial File Provider open failures too; a failed open otherwise gives
+# the game an immediate fatal short read before read_exact_at can retry.
+replace("src/io.rs",
+        '''                                Err(e) => eprintln!("[io] open {path}: {e}"),''',
+        '''                                Err(e) => {
+                                    eprintln!("[io] open {path}: {e}");
+                                    if matches!(e.raw_os_error(), Some(5 | 6 | 9)) {
+                                        for (attempt, delay_ms) in [30_u64, 60, 120, 240, 480, 960].into_iter().enumerate() {
+                                            std::thread::sleep(Duration::from_millis(delay_ms));
+                                            match File::open(root.join(path)) {
+                                                Ok(reopened) => {
+                                                    handles.insert(id, reopened);
+                                                    eprintln!("[io] transient File Provider open recovered: {path} attempt={}", attempt + 1);
+                                                    break;
+                                                }
+                                                Err(next) if attempt == 5 =>
+                                                    eprintln!("[io] persistent open failure {path}: {next}"),
+                                                Err(_) => {}
+                                            }
+                                        }
+                                    }
+                                },''')
+# WGSL source files live on the same USB provider, outside the RAGE archive
+# read path. Retry only transient failures; never substitute fake shader code.
+replace("src/gpu.rs",
+        '''        let source = match std::fs::read_to_string(self.shader_dir.join(format!("{hash}.wgsl"))) {''',
+        '''        let source = match {
+            let path = self.shader_dir.join(format!("{hash}.wgsl"));
+            let mut result = std::fs::read_to_string(&path);
+            for delay_ms in [20_u64, 50, 100, 200, 400, 800] {
+                let retryable = result.as_ref().err().is_some_and(|e| {
+                    matches!(e.raw_os_error(), Some(5 | 6 | 9))
+                        || matches!(e.kind(), std::io::ErrorKind::Interrupted | std::io::ErrorKind::WouldBlock)
+                });
+                if !retryable { break; }
+                std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+                result = std::fs::read_to_string(&path);
+            }
+            result
+        } {''')
+print("Transient iOS File Provider errors 5/6/9 retried for game archives and WGSL shader files")

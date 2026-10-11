@@ -50,5 +50,13 @@ replace_once(muguet / "ios/Info.plist",
   </dict>
   <key>UISupportedInterfaceOrientations</key>""")
 
+# Support portrait at launch AND landscape after Play. The visible UIKit
+# tab controller and native winit root controller each restrict the active mode.
+replace_once(muguet / "ios/Info.plist",
+    "  <key>UISupportedInterfaceOrientations</key>\n  <array><string>UIInterfaceOrientationLandscapeRight</string><string>UIInterfaceOrientationLandscapeLeft</string></array>",
+    "  <key>UIInterfaceOrientation</key><string>UIInterfaceOrientationPortrait</string>\n"
+    "  <key>UISupportedInterfaceOrientations</key>\n"
+    "  <array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationLandscapeRight</string><string>UIInterfaceOrientationLandscapeLeft</string></array>")
+
 assert "GTAIOSSceneDelegate" in (muguet / "ios/Launcher.swift").read_text()
 print("iOS 27 UIScene manifest, Swift scene delegate and pinned winit Metal window ready")

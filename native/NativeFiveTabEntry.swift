@@ -16,14 +16,14 @@ final class GTAIOSSceneDelegate: UIResponder, UIWindowSceneDelegate {
     func sceneDidBecomeActive(_ scene: UIScene) {
         if !GTAIOSOrientation.playing, let windowScene = scene as? UIWindowScene {
             windowScene.requestGeometryUpdate(
-                UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .landscapeRight)
+                UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .portrait)
             ) { error in
-                LogStore.shared.write("orientation", "Landscape launcher request: \(error.localizedDescription)")
+                LogStore.shared.write("orientation", "Portrait launcher request: \(error.localizedDescription)")
             }
             windowScene.windows.forEach {
                 $0.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
             }
-            LogStore.shared.write("orientation", "Landscape enforced on launcher activation")
+            LogStore.shared.write("orientation", "Portrait enforced on launcher activation")
         }
         NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification,
                                         object: UIApplication.shared)
@@ -78,27 +78,29 @@ private func muguet_unmount_external()
 
 @MainActor enum GTAIOSOrientation { static var playing = false }
 @MainActor enum GTAIOSLandscape {
+    // Called only after the portrait-only launcher is dismissed. The Rust
+    // winit event loop switches the underlying Metal controller to landscape
+    // when it receives the Play callback; never request landscape while the
+    // portrait launcher is still the visible controller.
     static func enforce(_ finished: @escaping () -> Void) {
         GTAIOSOrientation.playing = true
         guard let scene = UIApplication.shared.connectedScenes
             .compactMap({ $0 as? UIWindowScene })
             .first(where: { $0.activationState == .foregroundActive }) else {
-            LogStore.shared.write("orientation", "Landscape scene not available")
+            LogStore.shared.write("orientation", "Landscape scene unavailable")
             finished()
             return
         }
-        if #available(iOS 16.0, *) {
-            scene.requestGeometryUpdate(UIWindowScene.GeometryPreferences.iOS(
-                interfaceOrientations: .landscapeRight)) { error in
-                LogStore.shared.write("orientation", "Landscape request error: \(error.localizedDescription)")
-            }
-            scene.windows.forEach {
-                $0.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
-            }
+        scene.windows.forEach {
+            $0.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
         }
-        UIViewController.attemptRotationToDeviceOrientation()
-        DispatchQueue.main.async {
-            LogStore.shared.write("orientation", "Landscape requested; actual=\(scene.interfaceOrientation.rawValue)")
+        scene.requestGeometryUpdate(
+            UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .landscapeRight)
+        ) { error in
+            LogStore.shared.write("orientation", "Game-only landscape request: \(error.localizedDescription)")
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+            LogStore.shared.write("orientation", "Gameplay geometry after Play: \(scene.interfaceOrientation.rawValue)")
             finished()
         }
     }
@@ -119,7 +121,10 @@ enum NativeRuntimeBridge {
             SteamIOSGamepadInput.shared.reserveSessionSlot()
             GTAIOSInputSensitivity.apply()
             LogStore.shared.write("native", "Starting embedded engine with external game library")
-            GTAIOSLandscape.enforce { launch?() }
+            // Dismiss the portrait-only launcher first. The gameplay mask
+            // changes on the native winit window before requesting rotation.
+            GTAIOSOrientation.playing = true
+            launch?()
         } catch {
             LogStore.shared.write("native", "Settings write failed: \(error)")
         }
@@ -137,7 +142,9 @@ public func muguetShowLauncher(_ viewController: UnsafeMutableRawPointer,
         guard let launcher else { return }
         launcher.dismiss(animated: false) {
             done()
-            DispatchQueue.main.async {
+            // Give winit one event-loop tick to switch its root controller's
+            // supported orientations from portrait to landscape.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                 GTAIOSLandscape.enforce {
                     TouchControlsHost.attach()
                     LogStore.shared.write("controls", "SteamIOS gameplay overlay attached in landscape")
