@@ -506,4 +506,34 @@ replace("src/gpu.rs",
             }
             result
         } {''')
-print("Transient iOS File Provider errors 5/6/9 retried for game archives and WGSL shader files")
+# iOS 27 USB-C volumes exposed by com.apple.filesystems.UserFS.FileProvider
+# can lose their LiveFiles materialization after minutes of successful reads.
+# In the observed on-device logs this is ENOENT (2), *not* the earlier EIO
+# (5), ENXIO (6), or EBADF (9). The manifest already enumerates each expected
+# data file; these failures warrant bounded retries while the provider may
+# rematerialize the item. Do not apply this behavior to ordinary local files,
+# or return zero-filled/partial game archive data.
+replace("src/io.rs",
+        '    let mut handles: HashMap<i32, File> = HashMap::new();',
+        '''    let mut handles: HashMap<i32, File> = HashMap::new();
+    let provider_backed = root.to_string_lossy().contains("/Library/LiveFiles/");''')
+replace("src/io.rs",
+        '''                                matches!(e.raw_os_error(), Some(5 | 6 | 9))
+                                    || matches!(e.kind(),''',
+        '''                                matches!(e.raw_os_error(), Some(5 | 6 | 9))
+                                    || (provider_backed && e.raw_os_error() == Some(2))
+                                    || matches!(e.kind(),''')
+replace("src/io.rs",
+        '                                    if matches!(e.raw_os_error(), Some(5 | 6 | 9)) {',
+        '''                                    if matches!(e.raw_os_error(), Some(5 | 6 | 9))
+                                        || (provider_backed && e.raw_os_error() == Some(2)) {''')
+replace("src/gpu.rs",
+        '''                    matches!(e.raw_os_error(), Some(5 | 6 | 9))
+                        || matches!(e.kind(),''',
+        '''                    matches!(e.raw_os_error(), Some(5 | 6 | 9))
+                        || (self.shader_dir.to_string_lossy().contains("/Library/LiveFiles/")
+                            && e.raw_os_error() == Some(2))
+                        || matches!(e.kind(),''')
+print("Provider-backed ENOENT (2) recovery enabled for expected game archives and shader sources")
+
+print("Transient iOS File Provider errors 2/5/6/9 retried for game archives and WGSL shader files")
