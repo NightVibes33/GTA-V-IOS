@@ -68,8 +68,12 @@ jobs:
           grep -Fq 'muguet_steamios_set_mouse_sensitivity' native/Muguet/src/input.rs
           grep -Fq 'muguet_steamios_set_stick_gain' native/Muguet/src/input.rs
           grep -Fq 'GTAIOSLandscape.enforce' native/Muguet/ios/Launcher.swift
+          grep -Fq 'RangeCache::new("archives", 120 << 20, 1008 << 20)' native/Muguet/src/io.rs
           grep -Fq 'provider_backed && e.raw_os_error() == Some(2)' native/Muguet/src/io.rs
-          grep -Fq 'self.shader_dir.to_string_lossy().contains("/Library/LiveFiles/")' native/Muguet/src/gpu.rs
+          grep -Fq 'usb_exact(&mut handles, id, &path, at, target, provider_backed)' native/Muguet/src/io.rs
+          grep -Fq 'read_cached_shader' native/Muguet/src/gpu.rs
+          grep -Fq 'mod usb_range_cache;' native/Muguet/src/main.rs
+          grep -Fq 'const BLOCK: u64 = 256 * 1024;' native/Muguet/src/usb_range_cache.rs
           grep -Fq 'NSFileCoordinator(filePresenter: nil)' native/Muguet/ios/Launcher.swift
           grep -Fq 'NSFileProviderErrorDomain' native/Muguet/ios/Launcher.swift
           grep -Fq 'verifyReadyForPlay' native/Muguet/ios/GTAFiveTabLauncher.swift
@@ -114,6 +118,11 @@ jobs:
           rustup toolchain install 1.98.1 --profile minimal
           rustup default 1.98.1
           rustup target add aarch64-apple-ios --toolchain 1.98.1
+      - name: Verify bounded USB cache with native Rust unit tests
+        run: |
+          set -euo pipefail
+          rustc --edition=2021 --test native/USBRangeCache.rs -o "$RUNNER_TEMP/gtaios-range-cache-tests"
+          "$RUNNER_TEMP/gtaios-range-cache-tests" --nocapture
       - uses: actions/cache@v4
         with:
           path: |

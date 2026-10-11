@@ -537,3 +537,28 @@ replace("src/gpu.rs",
 print("Provider-backed ENOENT (2) recovery enabled for expected game archives and shader sources")
 
 print("Transient iOS File Provider errors 2/5/6/9 retried for game archives and WGSL shader files")
+
+
+# Install bounded, local-only USB cache into the pinned native engine.
+# Selected GTA V external data stays unmodified and is never bundled.
+replace("src/main.rs", "mod io;\n", "mod io;\nmod usb_range_cache;\n")
+(source / "src/usb_range_cache.rs").write_text(
+    (base / "USBRangeCache.rs").read_text(encoding="utf-8"), encoding="utf-8")
+(source / "src/io.rs").write_text(
+    (base / "USBRangeIO.rs").read_text(encoding="utf-8"), encoding="utf-8")
+gpu_path = source / "src/gpu.rs"
+gpu_text = gpu_path.read_text(encoding="utf-8")
+shader_begin = '        let source = match {\n            let path = self.shader_dir.join(format!("{hash}.wgsl"));'
+shader_end = '        } {\n            Ok(s) => s,'
+assert gpu_text.count(shader_begin) == 1, "WGSL cache adapter start changed"
+start = gpu_text.index(shader_begin)
+end = gpu_text.index(shader_end, start) + len('        }')
+gpu_text = (gpu_text[:start] +
+    '        let source = match crate::usb_range_cache::read_cached_shader(&self.shader_dir.join(format!("{hash}.wgsl")))' +
+    gpu_text[end:])
+before_consts = 'std::fs::read_to_string(self.shader_dir.join(format!("{hash}.consts.json")))'
+assert gpu_text.count(before_consts) == 1, "WGSL constants adapter changed"
+gpu_text = gpu_text.replace(before_consts,
+    'crate::usb_range_cache::read_cached_shader(&self.shader_dir.join(format!("{hash}.consts.json")))')
+gpu_path.write_text(gpu_text, encoding="utf-8")
+print("Bounded USB cache installed: 1024MiB disk, 128MiB RAM, 256KiB blocks")
