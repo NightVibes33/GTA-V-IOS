@@ -66,7 +66,7 @@ private func muguet_has_game_code() -> Bool
 private func muguet_unmount_external()
 
 @MainActor enum GTAIOSOrientation { static var playing = false }
-enum GTAIOSLandscape {
+@MainActor enum GTAIOSLandscape {
     static func enforce(_ finished: @escaping () -> Void) {
         GTAIOSOrientation.playing = true
         guard let scene = UIApplication.shared.connectedScenes
