@@ -366,7 +366,7 @@ replace("src/app.rs",
         '''            WindowEvent::Focused(f) => {
                 input::set_focus(f);
                 if !f { self.unlock(&window); }
-            },''',
+            }''',
         '''            WindowEvent::Focused(f) => {
                 #[cfg(target_os = "ios")]
                 let f = f || crate::pad::steamios_overlay_active();
