@@ -89,9 +89,9 @@ launcher = (project / "ios/Sources/UI/GTAFiveTabLauncher.swift").read_text(encod
 launcher = launcher.replace("GameNavigationController(rootViewController: entry.0)",
                             "UINavigationController(rootViewController: entry.0)")
 launcher = launcher.replace("ControllerSettingsViewController()", "GTANativeControlsViewController()")
-# The GTAiOS launcher and engine must both reject portrait.
-assert 'supportedInterfaceOrientations: UIInterfaceOrientationMask { .landscape }' in launcher
-assert 'preferredInterfaceOrientationForPresentation: UIInterfaceOrientation { .landscapeRight }' in launcher
+# Native launcher is portrait until Play requests landscape gameplay.
+assert 'GTAIOSOrientation.playing ? .landscape : .portrait' in launcher
+assert 'GTAIOSOrientation.playing ? .landscapeRight : .portrait' in launcher
 old_navigation = """        navigationController?.setNavigationBarHidden(false, animated: true)
         let gameplay = GameViewController()
         gameplay.hidesBottomBarWhenPushed = true
@@ -139,17 +139,10 @@ replace("build.rs", '.arg("ios/Launcher.swift")',
         '.args(["ios/Launcher.swift", "ios/GTAFiveTabLauncher.swift",\n'
         '               "ios/EngineOptions.swift", "ios/GTALaunchPreferences.swift",\n'
         '               "ios/LogStore.swift"])')
-# Copy across the original Rockstar artwork, without image generation/reuse.
+# Bundle the application icon and developer avatar, never GTA promotional art.
 replace("ios/project.yml",
         '- path: ../../../ios/Sources/Resources/gtav-story-trio.jpg',
-        '\n      '.join('- path: ../../../ios/Sources/Resources/' + f for f in [
-            "gtav-story-trio.jpg", "gtav-official-cover.jpg",
-            "gtav-official-hero.jpg", "gtav-car-gameplay.jpg",
-            "gtav-vinewood-view.jpg", "gtav-city-helicopter.jpg",
-            "gtav-franklin-race.jpg", "gtav-official-header.jpg",
-            "gtaios-developer-avatar.png"
-        ]))
-
+        '- path: ../../../ios/Sources/Resources/gtaios-developer-avatar.png')
 # Detaching the Files provider must also unmount the native Rust game root.
 replace("src/config.rs",
         '// Read-only mount: never extract, prune, write, or copy the selected library.',
@@ -214,9 +207,12 @@ replace("ios/Info.plist",
 replace("ios/project.yml",
         '- path: ../../../ios/Sources/Resources/Assets.xcassets',
         '- path: ../LICENSE\n      - path: ../../../ios/Sources/Resources/Assets.xcassets')
-# The pinned Muguet plist already supports landscape right and left only.
+# Explicitly permit both scene geometries, with a portrait-only launcher.
+replace("ios/Info.plist",
+        '<array><string>UIInterfaceOrientationLandscapeRight</string>',
+        '<array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationLandscapeRight</string>')
 plist = (source / "ios/Info.plist").read_text(encoding="utf-8")
-assert '<string>UIInterfaceOrientationPortrait</string>' not in plist
+assert '<string>UIInterfaceOrientationPortrait</string>' in plist
 assert '<string>UIInterfaceOrientationLandscapeRight</string>' in plist
 assert '<string>UIInterfaceOrientationLandscapeLeft</string>' in plist
 print("Native engine uses original GTAiOS five-tab UIKit UI and engine-backed settings")
@@ -361,3 +357,29 @@ replace("src/app.rs",
                 if !f { self.unlock(&window); }
             },''')
 print("SteamIOS native input preserves focus and mouse lock during gameplay")
+
+# Live sensitivity: the old LazyLock cached sensitivity at startup. Sliders
+# must update the same native guest input data while gameplay is running.
+replace("src/input.rs",
+        '''static SENS: LazyLock<f64> = LazyLock::new(|| std::env::var("MUGUET_MOUSE_SENS").ok().and_then(|v| v.parse().ok()).unwrap_or(2.0));''',
+        '''static SENS: AtomicU64 = AtomicU64::new(2.0f64.to_bits());
+static STICK_GAIN: AtomicU64 = AtomicU64::new(2.0f64.to_bits());
+#[no_mangle]
+pub extern "C" fn muguet_steamios_set_mouse_sensitivity(value: f64) {
+    if value.is_finite() { SENS.store(value.clamp(0.25, 12.0).to_bits(), Ordering::Release); }
+}
+#[no_mangle]
+pub extern "C" fn muguet_steamios_set_stick_gain(value: f64) {
+    if value.is_finite() { STICK_GAIN.store(value.clamp(0.25, 12.0).to_bits(), Ordering::Release); }
+}
+pub fn native_stick_gain() -> f64 { f64::from_bits(STICK_GAIN.load(Ordering::Acquire)) }''')
+replace("src/input.rs",
+        '''f.0 += dx * *SENS;
+        f.1 += dy * *SENS;''',
+        '''let sensitivity = f64::from_bits(SENS.load(Ordering::Acquire));
+        f.0 += dx * sensitivity;
+        f.1 += dy * sensitivity;''')
+replace("src/pad.rs", 'const LOOK_SPEED: f64 = 700.0;', 'const LOOK_SPEED: f64 = 1100.0;')
+replace("src/pad.rs", 'input::mouse_delta_f(dx * LOOK_SPEED * dt, dy * LOOK_SPEED * dt);',
+        'input::mouse_delta_f(dx * LOOK_SPEED * dt * input::native_stick_gain(), dy * LOOK_SPEED * dt * input::native_stick_gain());')
+print("Live camera and controller right-stick gain implemented")

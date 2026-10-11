@@ -597,10 +597,10 @@ final class ControlsWindow: UIWindow {
     }
     static var sensitivity: Double {
         get {
-            let value = UserDefaults.standard.object(forKey: sensitivityKey) as? Double ?? 1.0
-            return min(max(value, 0.25), 3.0)
+            let value = UserDefaults.standard.object(forKey: sensitivityKey) as? Double ?? 2.0
+            return min(max(value, 0.25), 12.0)
         }
-        set { UserDefaults.standard.set(min(max(newValue, 0.25), 3.0), forKey: sensitivityKey) }
+        set { UserDefaults.standard.set(min(max(newValue, 0.25), 12.0), forKey: sensitivityKey) }
     }
 }
 

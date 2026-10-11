@@ -64,14 +64,18 @@ jobs:
           grep -Fq 'input::set_focus(true);' native/Muguet/src/pad.rs
           grep -Fq 'if held(0x4000) { keys.insert("Space"); }' native/Muguet/src/pad.rs
           grep -Fq 'if pad.rt > 51 { *buttons |= 1; }' native/Muguet/src/pad.rs
-          grep -Fq 'input::mouse_delta_f(dx * LOOK_SPEED * dt, dy * LOOK_SPEED * dt);' native/Muguet/src/pad.rs
+          grep -Fq 'input::native_stick_gain()' native/Muguet/src/pad.rs
+          grep -Fq 'muguet_steamios_set_mouse_sensitivity' native/Muguet/src/input.rs
+          grep -Fq 'muguet_steamios_set_stick_gain' native/Muguet/src/input.rs
           grep -Fq 'GTAIOSLandscape.enforce' native/Muguet/ios/Launcher.swift
+          grep -Fq 'GTAIOSOrientation.playing' native/Muguet/ios/GTAFiveTabLauncher.swift
+          ! grep -Fq 'GTAReference.image(' native/Muguet/ios/GTAFiveTabLauncher.swift
           grep -Fq 'muguet_steamios_text' native/Muguet/src/pad.rs
           grep -Fq 'steamios_text(character' native/Muguet/src/input.rs
           grep -Fq 'steamios_apply_touch(steamios' native/Muguet/src/pad.rs
           grep -Fq 'steamios_overlay_active()' native/Muguet/src/app.rs
           grep -Fq 'input::set_focus(true);' native/Muguet/src/pad.rs
-          ! grep -Fq 'UIInterfaceOrientationPortrait' native/Muguet/ios/Info.plist
+          grep -Fq 'UIInterfaceOrientationPortrait' native/Muguet/ios/Info.plist
           grep -Fq 'UIInterfaceOrientationLandscapeRight' native/Muguet/ios/Info.plist
           grep -Fq 'muguet_steamios_pad_update' native/Muguet/src/pad.rs
           grep -Fq 'muguet_steamios_swipe_look' native/Muguet/src/pad.rs
@@ -153,7 +157,7 @@ jobs:
           strings "$APP/muguet" > "$RUNNER_TEMP/gtaios-app-symbols.txt"
           grep -Fq GTAIOSSceneDelegate "$RUNNER_TEMP/gtaios-app-symbols.txt"
           /usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$APP/Info.plist" | grep -Fxq '18.0'
-          ! /usr/libexec/PlistBuddy -c 'Print :UISupportedInterfaceOrientations' "$APP/Info.plist" | grep -Fq Portrait
+          /usr/libexec/PlistBuddy -c 'Print :UISupportedInterfaceOrientations' "$APP/Info.plist" | grep -Fq Portrait
           /usr/libexec/PlistBuddy -c 'Print :UISupportedInterfaceOrientations' "$APP/Info.plist" | grep -Fq LandscapeRight
           (cd "$STAGE" && zip -qry "$GITHUB_WORKSPACE/GTAiOS.ipa" Payload)
           python3 native/verify_external_assets.py --ipa GTAiOS.ipa

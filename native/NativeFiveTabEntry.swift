@@ -65,8 +65,10 @@ private func muguet_has_game_code() -> Bool
 @_silgen_name("muguet_unmount_external")
 private func muguet_unmount_external()
 
+@MainActor enum GTAIOSOrientation { static var playing = false }
 enum GTAIOSLandscape {
     static func enforce(_ finished: @escaping () -> Void) {
+        GTAIOSOrientation.playing = true
         guard let scene = UIApplication.shared.connectedScenes
             .compactMap({ $0 as? UIWindowScene })
             .first(where: { $0.activationState == .foregroundActive }) else {
@@ -104,6 +106,7 @@ enum NativeRuntimeBridge {
             try NativeMuguetSettings.save()
             TouchControlsModel.shared.ensureDefaultLayout()
             SteamIOSGamepadInput.shared.reserveSessionSlot()
+            GTAIOSInputSensitivity.apply()
             LogStore.shared.write("native", "Starting embedded engine with external game library")
             GTAIOSLandscape.enforce { launch?() }
         } catch {
@@ -240,6 +243,20 @@ enum NativeEngineStatus {
     }
 }
 
+@_silgen_name("muguet_steamios_set_mouse_sensitivity")
+private func muguet_steamios_set_mouse_sensitivity(_ value: Double)
+@_silgen_name("muguet_steamios_set_stick_gain")
+private func muguet_steamios_set_stick_gain(_ value: Double)
+
+@MainActor enum GTAIOSInputSensitivity {
+    static func apply() {
+        let mouse = UserDefaults.standard.object(forKey: ControllerManager.sensitivityKey) as? Double ?? 2.0
+        let stick = UserDefaults.standard.object(forKey: "gtaios.native.touchSensitivity") as? Double ?? 2.0
+        muguet_steamios_set_mouse_sensitivity(min(max(mouse, 0.25), 12.0))
+        muguet_steamios_set_stick_gain(min(max(stick, 0.25), 12.0))
+        LogStore.shared.write("controls", "Live sensitivity mouse=\(mouse) stick=\(stick)")
+    }
+}
 enum ControllerManager {
     static let deadzoneKey = "gtaios.native.deadzone"
     static let sensitivityKey = "gtaios.native.lookSensitivity"
@@ -291,8 +308,8 @@ enum NativeMuguetSettings {
         json["scale"] = Double(EngineOptions.value("scale")) ?? 0.65
         json["fps_limit"] = Int(EngineOptions.value("fps")) ?? 30
         json["texture_quality"] = Int(EngineOptions.value("textureQuality")) ?? 0
-        json["touch_sensitivity"] = UserDefaults.standard.object(forKey: "gtaios.native.touchSensitivity") as? Double ?? 1.0
-        json["mouse_sensitivity"] = UserDefaults.standard.object(forKey: ControllerManager.sensitivityKey) as? Double ?? 1.0
+        json["touch_sensitivity"] = UserDefaults.standard.object(forKey: "gtaios.native.touchSensitivity") as? Double ?? 2.0
+        json["mouse_sensitivity"] = UserDefaults.standard.object(forKey: ControllerManager.sensitivityKey) as? Double ?? 2.0
         json["mute"] = GTALaunchPreferences.enabled("mute", fallback: false)
         json["master_volume"] = GTALaunchPreferences.fraction("masterVolume", fallback: 1.0)
         json["multiplayer"] = UserDefaults.standard.bool(forKey: "gtaios.native.multiplayer")
@@ -321,15 +338,14 @@ final class GTANativeControlsViewController: GTAReferencePage {
     override func viewDidLoad() {
         super.viewDidLoad()
         stack.addArrangedSubview(GTAReference.section("Controls"))
-        installHero("gtav-franklin-race", height: 170)
         let panel = GTAReference.panelView()
         panel.addArrangedSubview(GTAReference.label("Native Game Controls", size: 18, weight: .bold))
         let name = GCController.controllers().first?.vendorName ?? "No physical controller connected"
         panel.addArrangedSubview(GTAReference.label(name, size: 12, color: GTAReference.green))
-        addSlider("Touch look sensitivity", key: "gtaios.native.touchSensitivity",
-                  fallback: 1, min: 0.25, max: 3, panel: panel)
-        addSlider("Camera sensitivity", key: ControllerManager.sensitivityKey,
-                  fallback: 1, min: 0.25, max: 3, panel: panel)
+        addSlider("Right-stick look speed", key: "gtaios.native.touchSensitivity",
+                  fallback: 2, min: 0.25, max: 12, panel: panel)
+        addSlider("Camera and mouse sensitivity", key: ControllerManager.sensitivityKey,
+                  fallback: 2, min: 0.25, max: 12, panel: panel)
         let mute = UISwitch()
         mute.isOn = GTALaunchPreferences.enabled("mute", fallback: false)
         let row = UIStackView()
@@ -375,7 +391,7 @@ final class GTANativeControlsViewController: GTAReferencePage {
                                                    weight: .semibold))
         let swipeSensitivity = UISlider()
         swipeSensitivity.minimumValue = 0.25
-        swipeSensitivity.maximumValue = 3.0
+        swipeSensitivity.maximumValue = 12.0
         swipeSensitivity.value = Float(GTAIOSSwipeLookSettings.sensitivity)
         swipeSensitivity.addAction(UIAction { _ in
             GTAIOSSwipeLookSettings.sensitivity = Double(swipeSensitivity.value)
@@ -409,6 +425,7 @@ final class GTANativeControlsViewController: GTAReferencePage {
         slider.tintColor = GTAReference.green
         slider.addAction(UIAction { _ in
             UserDefaults.standard.set(Double(slider.value), forKey: key)
+            GTAIOSInputSensitivity.apply()
         }, for: .valueChanged)
         panel.addArrangedSubview(slider)
     }
@@ -432,7 +449,6 @@ final class GTANativeMultiplayerViewController: GTAReferencePage {
         }, for: .touchUpInside)
         stack.addArrangedSubview(back)
         stack.addArrangedSubview(GTAReference.section("Multiplayer"))
-        installHero("gtav-city-helicopter", height: 145)
         let panel = GTAReference.panelView()
         let enableRow = UIStackView()
         enableRow.axis = .horizontal

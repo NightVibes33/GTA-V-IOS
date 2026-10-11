@@ -25,18 +25,6 @@ enum GTAReference {
         l.adjustsFontForContentSizeCategory = true
         return l
     }
-    static func image(_ name: String, height: CGFloat, radius: CGFloat = 16) -> UIImageView {
-        let file = Bundle.main.url(forResource: name, withExtension: "jpg")
-        let v = UIImageView(image: file.flatMap { UIImage(contentsOfFile: $0.path) })
-        v.contentMode = .scaleAspectFill
-        v.clipsToBounds = true
-        v.layer.cornerRadius = radius
-        v.layer.cornerCurve = .continuous
-        v.backgroundColor = panel
-        v.translatesAutoresizingMaskIntoConstraints = false
-        v.heightAnchor.constraint(equalToConstant: height).isActive = true
-        return v
-    }
     static func panelView(_ padding: CGFloat = 14) -> UIStackView {
         let stack = UIStackView()
         stack.axis = .vertical
@@ -345,8 +333,12 @@ final class GTAFiveTabController: UITabBarController {
         chooseSnapshotTab()
         #endif
     }
-    override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .landscape }
-    override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation { .landscapeRight }
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
+        GTAIOSOrientation.playing ? .landscape : .portrait
+    }
+    override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation {
+        GTAIOSOrientation.playing ? .landscapeRight : .portrait
+    }
     func select(_ index: Int) { selectedIndex = index }
     #if targetEnvironment(simulator)
     private func chooseSnapshotTab() {
@@ -398,11 +390,7 @@ class GTAReferencePage: UIViewController {
         gameplay.hidesBottomBarWhenPushed = true
         navigationController?.pushViewController(gameplay, animated: true)
     }
-    func installHero(_ name: String, height: CGFloat) {
-        let cover = GTAReference.image(name, height: height)
-        cover.accessibilityLabel = "Grand Theft Auto V Los Santos artwork"
-        stack.addArrangedSubview(cover)
-    }
+
 }
 
 final class GTAReferenceLibraryController: GTAReferencePage, UIDocumentPickerDelegate {
@@ -429,9 +417,6 @@ final class GTAReferenceLibraryController: GTAReferencePage, UIDocumentPickerDel
         cardRow.axis = .horizontal
         cardRow.spacing = 13
         cardRow.alignment = .center
-        let cover = GTAReference.image("gtav-official-cover", height: 165, radius: 12)
-        cover.widthAnchor.constraint(equalToConstant: 130).isActive = true
-        cardRow.addArrangedSubview(cover)
         let detail = UIStackView()
         detail.axis = .vertical
         detail.spacing = 8
@@ -466,8 +451,6 @@ final class GTAReferenceLibraryController: GTAReferencePage, UIDocumentPickerDel
         actions.addArrangedSubview(validate)
         actions.addArrangedSubview(disconnect)
         stack.addArrangedSubview(actions)
-        let banner = GTAReference.image("gtav-city-helicopter", height: 180)
-        stack.addArrangedSubview(banner)
         let infoCard = GTAReference.panelView()
         infoCard.addArrangedSubview(GTAReference.label("Game Information", size: 19, weight: .bold))
         infoCard.addArrangedSubview(GTAReference.label("Title: Grand Theft Auto V · Developer: Rockstar Games",
@@ -614,7 +597,6 @@ final class GTAReferenceGraphicsController: GTAReferencePage {
     override func viewDidLoad() {
         super.viewDidLoad()
         stack.addArrangedSubview(GTAReference.section("Game Settings"))
-        installHero("gtav-official-hero", height: 174)
 
         let performance = GTAReference.panelView(11)
         performance.addArrangedSubview(GTAReference.label("Performance Monitor", size: 18, weight: .bold))
@@ -971,12 +953,6 @@ final class GTAReferenceMoreController: GTAReferencePage {
     override func viewDidLoad() {
         super.viewDidLoad()
         stack.addArrangedSubview(GTAReference.section("More"))
-        // Distinct, bundled Rockstar artwork for the fifth tab.
-        // This image is not shared with Home, Library, Graphics, or Controls.
-        let visual = GTAReference.image("gtav-car-gameplay", height: 131)
-        visual.accessibilityLabel = "Official Grand Theft Auto V promotional artwork"
-        stack.addArrangedSubview(visual)
-
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "Unknown"
         let about = GTAReference.panelView()

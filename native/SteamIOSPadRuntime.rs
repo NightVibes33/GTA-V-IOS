@@ -133,7 +133,8 @@ fn steamios_apply_touch(
         (curve(pad.rx), -curve(pad.ry))
     } else { (0.0, 0.0) };
     if dx != 0.0 || dy != 0.0 {
-        input::mouse_delta_f(dx * LOOK_SPEED * dt, dy * LOOK_SPEED * dt);
+        let gain = input::native_stick_gain();
+        input::mouse_delta_f(dx * LOOK_SPEED * dt * gain, dy * LOOK_SPEED * dt * gain);
     }
 }
 
