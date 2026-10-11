@@ -89,9 +89,9 @@ launcher = (project / "ios/Sources/UI/GTAFiveTabLauncher.swift").read_text(encod
 launcher = launcher.replace("GameNavigationController(rootViewController: entry.0)",
                             "UINavigationController(rootViewController: entry.0)")
 launcher = launcher.replace("ControllerSettingsViewController()", "GTANativeControlsViewController()")
-# Native launcher is portrait until Play requests landscape gameplay.
-assert 'GTAIOSOrientation.playing ? .landscape : .portrait' in launcher
-assert 'GTAIOSOrientation.playing ? .landscapeRight : .portrait' in launcher
+# Both the launcher and native Metal gameplay must remain landscape-only.
+assert 'supportedInterfaceOrientations: UIInterfaceOrientationMask { .landscape }' in launcher
+assert 'preferredInterfaceOrientationForPresentation: UIInterfaceOrientation { .landscapeRight }' in launcher
 old_navigation = """        navigationController?.setNavigationBarHidden(false, animated: true)
         let gameplay = GameViewController()
         gameplay.hidesBottomBarWhenPushed = true
@@ -211,12 +211,9 @@ replace("ios/Info.plist",
 replace("ios/project.yml",
         '- path: ../../../ios/Sources/Resources/Assets.xcassets',
         '- path: ../LICENSE\n      - path: ../../../ios/Sources/Resources/Assets.xcassets')
-# Explicitly permit both scene geometries, with a portrait-only launcher.
-replace("ios/Info.plist",
-        '<key>UISupportedInterfaceOrientations</key>\n  <array><string>UIInterfaceOrientationLandscapeRight</string>',
-        '<key>UISupportedInterfaceOrientations</key>\n  <array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationLandscapeRight</string>')
+# Preserve the pinned engine's landscape-only Info.plist; do not inject portrait.
 plist = (source / "ios/Info.plist").read_text(encoding="utf-8")
-assert '<string>UIInterfaceOrientationPortrait</string>' in plist
+assert '<string>UIInterfaceOrientationPortrait</string>' not in plist
 assert '<string>UIInterfaceOrientationLandscapeRight</string>' in plist
 assert '<string>UIInterfaceOrientationLandscapeLeft</string>' in plist
 print("Native engine uses original GTAiOS five-tab UIKit UI and engine-backed settings")

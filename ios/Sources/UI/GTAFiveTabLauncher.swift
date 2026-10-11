@@ -333,12 +333,9 @@ final class GTAFiveTabController: UITabBarController {
         chooseSnapshotTab()
         #endif
     }
-    override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
-        GTAIOSOrientation.playing ? .landscape : .portrait
-    }
-    override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation {
-        GTAIOSOrientation.playing ? .landscapeRight : .portrait
-    }
+    // GTA V iOS is landscape-only throughout its entire lifecycle.
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .landscape }
+    override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation { .landscapeRight }
     func select(_ index: Int) { selectedIndex = index }
     #if targetEnvironment(simulator)
     private func chooseSnapshotTab() {
