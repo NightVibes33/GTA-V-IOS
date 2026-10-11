@@ -14,6 +14,17 @@ final class GTAIOSSceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 
     func sceneDidBecomeActive(_ scene: UIScene) {
+        if !GTAIOSOrientation.playing, let windowScene = scene as? UIWindowScene {
+            windowScene.requestGeometryUpdate(
+                UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .portrait)
+            ) { error in
+                LogStore.shared.write("orientation", "Portrait launcher request: \(error.localizedDescription)")
+            }
+            windowScene.windows.forEach {
+                $0.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+            }
+            LogStore.shared.write("orientation", "Portrait forced on launcher activation")
+        }
         NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification,
                                         object: UIApplication.shared)
         LogStore.shared.write("scene", "Scene active; native event loop resumed")

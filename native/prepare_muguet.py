@@ -77,7 +77,7 @@ replace('ios/project.yml', '- path: ../assets/muguet.icon', '- path: ../../../io
 replace('ios/project.yml', 'ASSETCATALOG_COMPILER_APPICON_NAME: muguet', 'ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon')
 replace('ios/project.yml', 'TARGETED_DEVICE_FAMILY: "1,2"', 'TARGETED_DEVICE_FAMILY: "1"')
 
-replace('ios/Launcher.swift', '            VStack(spacing: 16) {\n                Text("GTAiOS").font(.largeTitle.weight(.bold))', '            ScrollView {\n            VStack(spacing: 16) {\n                Text("GTAiOS").font(.largeTitle.weight(.bold))\n                Image("gtav-story-trio").resizable().scaledToFill()\n                    .frame(height: 100).clipped().accessibilityHidden(true)')
+replace('ios/Launcher.swift', '            VStack(spacing: 16) {\n                Text("GTAiOS").font(.largeTitle.weight(.bold))', '            ScrollView {\n            VStack(spacing: 16) {\n                Text("GTAiOS").font(.largeTitle.weight(.bold))')
 replace('ios/Launcher.swift', '            .padding(24)\n            .frame(maxWidth: .infinity)\n            Form {', '            .padding(24)\n            }\n            .frame(maxWidth: .infinity)\n            Form {')
 
 
@@ -383,3 +383,29 @@ replace("src/pad.rs", 'const LOOK_SPEED: f64 = 700.0;', 'const LOOK_SPEED: f64 =
 replace("src/pad.rs", 'input::mouse_delta_f(dx * LOOK_SPEED * dt, dy * LOOK_SPEED * dt);',
         'input::mouse_delta_f(dx * LOOK_SPEED * dt * input::native_stick_gain(), dy * LOOK_SPEED * dt * input::native_stick_gain());')
 print("Live camera and controller right-stick gain implemented")
+
+# Native stderr used to disappear into the system console on a sideloaded
+# iPhone. Stream real Muguet [io], [fs], [pause], [gpu] errors into Files.
+# Bounded rotation prevents perpetual engine logging from filling Documents.
+replace("src/config.rs",
+        '''    if cfg!(target_os = "ios") {
+        return;
+    }
+    let in_bundle''',
+        '''    if cfg!(target_os = "ios") {
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+        let logdir = PathBuf::from(home).join("Documents/GTAiOS-Logs");
+        let _ = std::fs::create_dir_all(&logdir);
+        let path = logdir.join("engine.txt");
+        if std::fs::metadata(&path).is_ok_and(|meta| meta.len() > 8 * 1024 * 1024) {
+            let _ = std::fs::rename(&path, logdir.join("engine-previous.txt"));
+        }
+        if let Ok(f) = std::fs::OpenOptions::new().append(true).create(true).open(&path) {
+            use std::os::fd::IntoRawFd;
+            let fd = f.into_raw_fd();
+            unsafe { dup2(fd, 2); dup2(fd, 1); }
+        }
+        return;
+    }
+    let in_bundle''')
+print("Native iOS engine stdout/stderr now written to Files/GTA V iOS/GTAiOS-Logs/engine.txt")

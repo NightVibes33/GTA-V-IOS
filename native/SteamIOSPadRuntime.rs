@@ -56,6 +56,7 @@ pub extern "C" fn muguet_steamios_text(character: u16) {
     input::steamios_text(character);
 }
 // Swipe movement enters the identical guest mouse delta block as right stick.
+static STEAMIOS_PAUSE_DOWN: AtomicBool = AtomicBool::new(false);
 static STEAMIOS_SWIPE_PACKETS: std::sync::atomic::AtomicU64 =
     std::sync::atomic::AtomicU64::new(0);
 #[no_mangle]
@@ -120,7 +121,22 @@ fn steamios_apply_touch(
     if held(0x0002) { keys.insert("ArrowDown"); }
     if held(0x0004) { keys.insert("ArrowLeft"); }
     if held(0x0008) { keys.insert("ArrowRight"); }
-    if held(0x0010) || held(0x0400) { keys.insert("Escape"); }
+    // SteamIOS Menu/Guide are *real* Escape keys. Do not send a held walking
+    // or shooting action in the same input frame as opening the pause menu.
+    let pausePressed = held(0x0010) || held(0x0400);
+    let pauseWasPressed = STEAMIOS_PAUSE_DOWN.swap(pausePressed, Ordering::Relaxed);
+    if pausePressed && !pauseWasPressed {
+        eprintln!("[pause] SteamIOS Escape pressed; guestStartMode={} packets={}",
+                  input::start_mode(), STEAMIOS_PACKETS.load(Ordering::Relaxed));
+    }
+    if !pausePressed && pauseWasPressed {
+        eprintln!("[pause] Escape released; if settings spinner persists, inspect [io] errors");
+    }
+    if pausePressed {
+        keys.clear();
+        *buttons = 0;
+        keys.insert("Escape");
+    }
     if held(0x0020) { keys.insert("KeyV"); }
     let curve = |v: i16| -> f64 {
         let v = axis(v);
